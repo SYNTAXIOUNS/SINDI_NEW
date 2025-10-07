@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h4>Manajemen User (Kanwil)</h4>
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card card-body">
+        <h6 class="mb-3">Tambah User Baru</h6>
+        <form method="POST">
+          <div class="mb-2">
+            <label class="form-label">Username</label>
+            <input name="username" class="form-control" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Password (default 123 jika kosong)</label>
+            <input name="password" class="form-control">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Role</label>
+            <select name="role" class="form-select" required>
+              <option value="mdt">MDT</option>
+              <option value="kankemenag">Kankemenag</option>
+              <option value="kanwil">Kanwil</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Kode MDT (opsional, wajib untuk role MDT)</label>
+            <input name="kode_mdt" class="form-control" placeholder="MDTXXX">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Wilayah (opsional)</label>
+            <input name="wilayah" class="form-control" placeholder="Kota/Kab">
+          </div>
+          <button class="btn btn-primary w-100">Simpan</button>
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card card-body">
+        <h6 class="mb-3">Daftar User</h6>
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle">
+            <thead class="table-light">
+              <tr><th>#</th><th>Username</th><th>Role</th><th>Kode MDT</th><th>Wilayah</th></tr>
+            </thead>
+            <tbody>
+              {% for u in users %}
+                <tr>
+                  <td>{{ u[0] }}</td>
+                  <td>{{ u[1] }}</td>
+                  <td><span class="badge text-bg-secondary">{{ u[2] }}</span></td>
+                  <td>{{ u[3] or '-' }}</td>
+                  <td>{{ u[4] or '-' }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="5" class="text-center text-muted">Belum ada user.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <small class="text-muted">* Hapus/ubah user bisa ditambahkan di tahap berikutnya.</small>
+      </div>
+    </div>
+  </div>
+{% endblock %}

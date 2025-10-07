@@ -1,0 +1,108 @@
+/* ===========================
+   🌿 Tema Resmi Kemenag RI
+   =========================== */
+
+body {
+  font-family: 'Poppins', 'Segoe UI', sans-serif;
+  background-color: #F8F9FA;
+  color: #212529;
+}
+
+/* Header */
+.header {
+  background-color: #ffffff;
+  border-bottom: 4px solid #006633;
+}
+.header h5 {
+  color: #006633;
+  font-weight: 600;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 240px;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #006633 0%, #1B8F47 100%);
+  color: #fff;
+  padding-top: 16px;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+.sidebar h5 {
+  color: #FFD700;
+  font-weight: 600;
+}
+.sidebar small {
+  color: #f2f2f2;
+}
+.sidebar hr {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.sidebar .nav-link {
+  color: #ffffff;
+  padding: 10px 18px;
+  display: block;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+.sidebar .nav-link:hover {
+  background: rgba(255, 215, 0, 0.2);
+  border-left: 4px solid #FFD700;
+  padding-left: 14px;
+}
+.sidebar .nav-link.active {
+  background: rgba(255, 255, 255, 0.25);
+  border-left: 4px solid #FFD700;
+}
+
+/* Main content */
+.content {
+  min-height: 100vh;
+  background: #F8F9FA;
+}
+
+.card {
+    opacity: 0;
+    transform: translateY(15px);
+    transition: all 0.6s ease-in-out;
+}
+.card.appear {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: #006633;
+  border-color: #006633;
+}
+.btn-primary:hover {
+  background-color: #1B8F47;
+  border-color: #1B8F47;
+}
+
+/* Tables & badges */
+.table-primary {
+  background-color: #E7F5E8 !important;
+  color: #006633;
+}
+.badge.text-bg-warning {
+  background-color: #FFD700 !important;
+  color: #000;
+}
+.badge.text-bg-success {
+  background-color: #1B8F47 !important;
+}
+
+.swal-animated {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  border-radius: 12px !important;
+}
+
+/* Footer */
+.footer {
+  background: #fff;
+  color: #555;
+  font-size: 0.9rem;
+  border-top: 3px solid #006633;
+}

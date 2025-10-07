@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-success">
+            <i class="bi bi-shield-check"></i> Verifikasi Pengajuan Nomor Ijazah MDT
+        </h3>
+        <span class="text-muted small">Pastikan semua data lengkap dan sesuai EMIS sebelum dikirim ke Kanwil</span>
+    </div>
+
+    {% if pengajuan_list %}
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-success text-white">
+            <i class="bi bi-archive"></i> Daftar Pengajuan dari MDT
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-success">
+                    <tr class="text-center">
+                        <th>No</th>
+                        <th>Nomor Batch</th>
+                        <th>Nama MDT</th>
+                        <th>Jenjang</th>
+                        <th>Tahun Pelajaran</th>
+                        <th>Jumlah Lulus</th>
+                        <th>Berkas Lulusan</th>
+                        <th>Tanggal Pengajuan</th>
+                        <th>Status</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pengajuan_list %}
+                    <tr class="text-center">
+                        <td>{{ loop.index }}</td>
+                        <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
+                        <td>{{ p[2] }}</td>
+                        <td>{{ p[3] }}</td>
+                        <td>{{ p[4] }}</td>
+                        <td>{{ p[5] }}</td>
+                        <td>
+                            {% if p[6] %}
+                                <button type="button" class="btn btn-sm btn-outline-success"
+                                        onclick="previewFile('{{ p[6] }}')">
+                                    <i class="bi bi-file-earmark-text"></i> Lihat
+                                </button>
+
+                            {% else %}
+                                <span class="text-muted">Tidak ada</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ p[7] }}</td>
+                        <td>
+                            {% if p[8] == 'Diverifikasi' %}
+                                <span class="badge bg-success">Diverifikasi</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">{{ p[8] or 'Menunggu' }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p[8] != 'Diverifikasi' %}
+                            <button class="btn btn-success btn-sm" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#verifModal{{ p[0] }}">
+                                <i class="bi bi-check2-circle"></i> Verifikasi
+                            </button>
+                            {% else %}
+                            <span class="text-muted small"><i class="bi bi-check-all"></i> Sudah diverifikasi</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODALS (dipindahkan ke luar tabel biar tidak tumpang tindih) -->
+    {% for p in pengajuan_list %}
+    <div class="modal fade" id="verifModal{{ p[0] }}" tabindex="-1" 
+         aria-labelledby="verifModalLabel{{ p[0] }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="{{ url_for('verifikasi_kemenag') }}" method="POST" 
+                  enctype="multipart/form-data" class="modal-content shadow border-0">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check2-circle"></i> Verifikasi Pengajuan MDT
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-start">
+                    <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
+                    <p><strong>Nama MDT:</strong> {{ p[2] }}</p>
+                    <p><strong>Jenjang:</strong> {{ p[3] }}</p>
+                    <p><strong>Tahun Pelajaran:</strong> {{ p[4] }}</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Upload Surat Rekomendasi (PDF)</label>
+                        <input type="file" class="form-control" name="rekomendasi_file" 
+                               accept=".pdf" required>
+                    </div>
+                    <p class="small text-muted">Pastikan berkas sesuai format resmi sebelum dikirim ke Kanwil.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-send-check"></i> Kirim ke Kanwil
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox display-4"></i>
+        <p class="mt-3">Belum ada pengajuan dari MDT yang menunggu verifikasi.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 🧩 Modal Preview PDF / Excel -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i> Pratinjau Berkas</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="previewContainer" style="height: 80vh;">
+                <iframe id="previewFrame" src="" width="100%" height="100%" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview File -->
+<script>
+function previewFile(path) {
+    const previewFrame = document.getElementById("previewFrame");
+    previewFrame.src = path;
+    const modal = new bootstrap.Modal(document.getElementById("previewModal"));
+    modal.show();
+}
+</script>
+
+<!-- Fix layer tumpang tindih -->
+<style>
+.modal {
+  z-index: 1055 !important;
+}
+.modal-backdrop {
+  z-index: 1050 !important;
+}
+</style>
+
+{% endblock %}
