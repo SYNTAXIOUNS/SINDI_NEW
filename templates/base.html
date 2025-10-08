@@ -119,9 +119,10 @@
                 <a class="nav-link {% if request.path == '/pengajuan' %}active{% endif %}" href="{{ url_for('pengajuan_mdt') }}">
                     <i class="bi bi-pencil-square"></i> Pengajuan
                 </a>
-                <a class="nav-link {% if request.path == '/hasil' %}active{% endif %}" href="{{ url_for('hasil_mdt') }}">
+                <a class="nav-link {% if request.path == '/hasil_mdt' %}active{% endif %}" href="{{ url_for('hasil_mdt_view') }}">
                     <i class="bi bi-file-earmark-check"></i> Hasil
                 </a>
+
             {% elif user.role == 'kankemenag' %}
                 <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
                     <i class="bi bi-shield-check"></i> Verifikasi

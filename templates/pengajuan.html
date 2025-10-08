@@ -17,7 +17,7 @@
             <form action="{{ url_for('pengajuan_mdt') }}" method="POST" enctype="multipart/form-data" class="modal-content shadow-sm border-0">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Form Pengajuan Nomor Ijazah</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-3">
@@ -46,7 +46,7 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Upload File Daftar Lulusan</label>
                             <input type="file" class="form-control" name="file_lulusan" accept=".pdf,.xls,.xlsx" required>
-                            <small class="text-muted">Format: PDF / Excel (Nama & NIS)</small>
+                            <small class="text-muted">Format: PDF / Excel (kolom Nama & NIS wajib ada)</small>
                         </div>
                     </div>
                 </div>
@@ -73,7 +73,7 @@
                         <th>Jenjang</th>
                         <th>Tahun Pelajaran</th>
                         <th>Jumlah Lulusan</th>
-                        <th>Tanggal</th>
+                        <th>Tanggal Pengajuan</th>
                         <th>Status</th>
                         <th>Berkas</th>
                     </tr>
@@ -89,20 +89,18 @@
                         <td>{{ p[7] }}</td>
                         <td>
                             {% if p[8] == 'Diverifikasi' %}
-                                <span class="badge bg-success">Diverifikasi</span>
+                                <span class="badge bg-success"><i class="bi bi-shield-check"></i> Diverifikasi</span>
                             {% elif p[8] == 'Ditetapkan' %}
-                                <span class="badge bg-primary">Ditetapkan</span>
+                                <span class="badge bg-primary"><i class="bi bi-award"></i> Ditetapkan</span>
                             {% else %}
-                                <span class="badge bg-warning text-dark">{{ p[8] or 'Menunggu' }}</span>
+                                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> {{ p[8] or 'Menunggu' }}</span>
                             {% endif %}
                         </td>
                         <td>
                             {% if p[6] %}
-                                <button type="button" class="btn btn-sm btn-outline-success"
-                                        onclick="previewFile('{{ p[6] }}')">
-                                    <i class="bi bi-file-earmark-text"></i> Lihat
+                                <button class="btn btn-sm btn-outline-success" onclick="previewFile('{{ p[6] }}')">
+                                    <i class="bi bi-eye"></i> Lihat
                                 </button>
-
                             {% else %}
                                 <span class="text-muted">-</span>
                             {% endif %}
@@ -113,11 +111,52 @@
             </table>
             {% else %}
                 <div class="text-center text-muted py-4">
-                    <i class="bi bi-inbox"></i><br>Belum ada pengajuan.
+                    <i class="bi bi-inbox display-4"></i>
+                    <p>Belum ada pengajuan yang dikirim.</p>
                 </div>
             {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Modal Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="previewTitle"><i class="bi bi-file-earmark-text"></i> Pratinjau Dokumen</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3" id="previewBody" style="max-height:80vh; overflow:auto;">
+        <div class="text-center text-muted p-5">Memuat dokumen...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function previewFile(path) {
+  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+  const body = document.getElementById('previewBody');
+  body.innerHTML = "<div class='text-center text-muted p-5'>⏳ Memuat dokumen...</div>";
+
+  // Pastikan path tidak mengandung 'uploads/' ganda
+  const cleanPath = path.replace(/^uploads[\\/]/, "");
+
+  fetch(`/preview-file/${cleanPath}`)
+    .then(res => {
+      if (!res.ok) throw new Error("Gagal memuat data (status " + res.status + ")");
+      return res.text();
+    })
+    .then(html => {
+      body.innerHTML = html;
+      modal.show();
+    })
+    .catch(err => {
+      body.innerHTML = `<div class='p-5 text-danger'>❌ Gagal memuat file: ${err.message}</div>`;
+      modal.show();
+    });
+}
+</script>
 
 {% endblock %}

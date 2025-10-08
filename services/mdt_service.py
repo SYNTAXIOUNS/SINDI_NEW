@@ -3,6 +3,7 @@ import pandas as pd
 from fpdf import FPDF
 import datetime
 import sqlite3
+import os
 
 DB_NAME = "sindi.db"
 
@@ -117,6 +118,16 @@ def list_pengajuan_for_kanwil():
         """)
         return c.fetchall()
 
+def update_status_pengajuan(pengajuan_id, status, alasan=None):
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE pengajuan
+            SET status=?, alasan=?
+            WHERE id=?
+        """, (status, alasan, pengajuan_id))
+        conn.commit()
+
 def generate_nomor_ijazah_batch(pengajuan_id):
     """Baca file Excel lulusan, buat nomor ijazah otomatis, simpan ke tabel nomor_ijazah"""
     with _conn() as conn:
@@ -225,3 +236,81 @@ def export_nomor_ijazah_pdf(pengajuan_id, output_path, nama_mdt="MDT"):
 
     pdf.output(output_path)
     return output_path
+
+def _conn():
+    return sqlite3.connect(DB_NAME)
+
+def get_jenjang_kode(jenjang):
+    """Konversi nama jenjang menjadi kode"""
+    jenjang_map = {
+        "Ula": "I",
+        "Wustha": "II",
+        "Ulya": "III"
+    }
+    return jenjang_map.get(jenjang, "I")  # default I
+
+def generate_nomor_ijazah_from_excel(pengajuan_id, kode_mdt, tahun, jenjang):
+    """Generate nomor ijazah otomatis untuk setiap santri dari file Excel"""
+    with _conn() as conn:
+        c = conn.cursor()
+
+        # Ambil path file Excel dari pengajuan
+        c.execute("SELECT file_lulusan FROM pengajuan WHERE id=?", (pengajuan_id,))
+        result = c.fetchone()
+        if not result:
+            raise Exception("File lulusan tidak ditemukan untuk pengajuan ini.")
+        file_path = result[0]
+
+        if not os.path.exists(file_path):
+            raise Exception(f"File tidak ditemukan di path: {file_path}")
+
+        # Baca Excel MDT
+        df = pd.read_excel(file_path)
+
+        # Pastikan ada kolom yang benar
+        if not {'Nama', 'NIS'}.issubset(df.columns):
+            raise Exception("File Excel harus memiliki kolom 'Nama' dan 'NIS'.")
+
+        # Ekstrak kode angka dari kode MDT (misal MDT012 -> 12)
+        kode_angka = ''.join(filter(str.isdigit, kode_mdt)) or "00"
+        kode_jenjang = get_jenjang_kode(jenjang)
+
+        nomor_list = []
+        for i, row in enumerate(df.itertuples(index=False), start=1):
+            nomor_urut = str(i).zfill(6)
+            nomor_ijazah = f"MDT-{kode_angka}-{kode_jenjang}-{tahun}-{nomor_urut}"
+            nomor_list.append((pengajuan_id, getattr(row, "Nama"), str(getattr(row, "NIS")),
+                               nomor_ijazah, tahun, jenjang))
+
+        # Simpan ke tabel nomor_ijazah
+        c.executemany("""
+            INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, nomor_list)
+
+        # Update status pengajuan
+        c.execute("UPDATE pengajuan SET status='Ditetapkan' WHERE id=?", (pengajuan_id,))
+        conn.commit()
+        
+        
+def list_hasil_nomor_ijazah_by_mdt(mdt_kode):
+    """Ambil seluruh daftar nomor ijazah milik MDT berdasarkan kode MDT"""
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT ni.id, p.nomor_batch, ni.nama_santri, ni.nis, ni.nomor_ijazah, ni.tahun, ni.jenjang
+            FROM nomor_ijazah ni
+            JOIN pengajuan p ON ni.pengajuan_id = p.id
+            JOIN users u ON p.mdt_id = u.id
+            WHERE u.kode_mdt = ?
+            ORDER BY ni.nomor_ijazah ASC
+        """, (mdt_kode,))
+        return c.fetchall()
+
+
+def get_nama_mdt_by_kode(kode_mdt):
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("SELECT username FROM users WHERE kode_mdt=?", (kode_mdt,))
+        row = c.fetchone()
+        return row[0] if row else kode_mdt

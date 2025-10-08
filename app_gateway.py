@@ -19,6 +19,9 @@ from services.mdt_service import (
 )
 from flask import send_file, jsonify
 from flask import send_from_directory, abort
+import os
+from flask import render_template
+import pandas as pd
 
 # ====== APP CONFIG ======
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -239,12 +242,23 @@ def pengajuan_mdt():
     pengajuans = list_pengajuan_batch_by_mdt(user["id"])
     return render_template("pengajuan.html", user=user, pengajuans=pengajuans)
 
+@app.route("/hasil_mdt", methods=["GET"])
+@require_role("mdt")
+def hasil_mdt_view():
+    from services.mdt_service import list_hasil_nomor_ijazah_by_mdt, get_nama_mdt_by_kode
+    user = current_user()
+    hasil = list_hasil_nomor_ijazah_by_mdt(user["kode_mdt"])
+    nama_mdt = get_nama_mdt_by_kode(user["kode_mdt"])
+
+    return render_template("hasil.html", user=user, hasil=hasil, nama_mdt=nama_mdt)
+
+
 # ==============================
 #  KANKEMENAG: Verifikasi (unggah rekomendasi)
 # ==============================
-@app.route("/verifikasi", methods=["GET", "POST"])
-@require_role("kankemenag")
-def verifikasi_kemenag():
+# @app.route("/verifikasi", methods=["GET", "POST"])
+#@require_role("kankemenag")
+#def verifikasi_kemenag():
     from services.mdt_service import list_pengajuan_for_kemenag, update_status_pengajuan
     user = current_user()
 
@@ -266,6 +280,23 @@ def verifikasi_kemenag():
     pengajuan_list = list_pengajuan_for_kemenag()
     return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
 
+@app.route("/verifikasi", methods=["GET", "POST"])
+@require_role("kankemenag")
+def verifikasi_kemenag():
+    from services.mdt_service import list_pengajuan_for_kemenag, update_status_pengajuan
+    user = current_user()
+
+    if request.method == "POST":
+        pengajuan_id = request.form.get("pengajuan_id")
+        status = request.form.get("status")
+        alasan = request.form.get("alasan", "").strip() or None
+
+        update_status_pengajuan(pengajuan_id, status, alasan)
+        flash(f"✅ Pengajuan berhasil diperbarui sebagai {status}.", "success")
+        return redirect(url_for("verifikasi_kemenag"))
+
+    pengajuan_list = list_pengajuan_for_kemenag()
+    return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
 
 # ==============================
 #  KANWIL: Penetapan + Export (Excel/PDF)
@@ -363,11 +394,66 @@ def list_pengajuan_for_kemenag():
     
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
+    """
+    Melayani file dari folder /uploads agar bisa dipratinjau langsung di browser (PDF, XLSX, dsb)
+    """
+    uploads_dir = os.path.join(os.getcwd(), "uploads")
+    
+    # Normalisasi path agar aman (hindari traversal ../../)
+    safe_path = os.path.normpath(os.path.join(uploads_dir, filename))
+    
+    # Cegah akses di luar folder uploads
+    if not safe_path.startswith(uploads_dir):
+        abort(403)
+    
+    # Pastikan file ada
+    if not os.path.isfile(safe_path):
+        abort(404)
+    
+    # Kirim file
+    return send_from_directory(uploads_dir, filename, as_attachment=False)
+
+@app.route("/preview-file/<path:filename>")
+def preview_file(filename):
     uploads_dir = os.path.join(os.getcwd(), "uploads")
     file_path = os.path.join(uploads_dir, filename)
+
+    print(f"🔍 Preview request for: {file_path}")  # <-- Tambahkan ini di sini
+
     if not os.path.isfile(file_path):
-        abort(404)
-    return send_from_directory(uploads_dir, filename)
+        print("❌ File tidak ditemukan.")
+        return "<div class='alert alert-danger p-3'>❌ File tidak ditemukan.</div>"
+
+    ext = filename.split(".")[-1].lower()
+
+    # ✅ Jika Excel: render ke tabel HTML
+    if ext in ["xlsx", "xls"]:
+        try:
+            df = pd.read_excel(file_path)
+            html_table = df.to_html(
+                index=False,
+                classes="table table-bordered table-striped table-sm align-middle",
+                border=0
+            )
+            return render_template("lihat_file_modal.html", filename=filename, table_html=html_table)
+        except Exception as e:
+            return f"<div class='alert alert-danger p-3'>Gagal membaca Excel: {e}</div>"
+
+    # ✅ Jika PDF: tampil langsung dalam iframe
+    elif ext == "pdf":
+        return f"<iframe src='/uploads/{filename}' width='100%' height='600px' style='border:none;'></iframe>"
+
+    # ❌ File lain: beri opsi download
+    else:
+        return f"""
+        <div class='p-5 text-center text-muted'>
+            <i class='bi bi-exclamation-triangle display-4'></i>
+            <p>Format file <b>.{ext}</b> tidak bisa dipratinjau.<br>
+            <a href='/uploads/{filename}' download class='btn btn-success mt-3'>
+                <i class='bi bi-download'></i> Unduh File Asli
+            </a></p>
+        </div>
+        """
 
 # ==============================
 #  RUN
