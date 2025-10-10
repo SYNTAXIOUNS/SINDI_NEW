@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-success">
+            <i class="bi bi-file-earmark-bar-graph"></i> Hasil Penetapan Semua MDT
+        </h3>
+    </div>
+
+    {% if hasil_list %}
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-success text-white">
+            <i class="bi bi-archive"></i> Daftar File Penetapan Ijazah
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-success">
+                    <tr>
+                        <th>No</th>
+                        <th>Nama MDT</th>
+                        <th>Jenjang</th>
+                        <th>Tahun</th>
+                        <th>Jumlah Lulus</th>
+                        <th>Batch</th>
+                        <th>File Hasil</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in hasil_list %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ h.nama_mdt }}</td>
+                        <td>{{ h.jenjang }}</td>
+                        <td>{{ h.tahun }}</td>
+                        <td>{{ h.jumlah }}</td>
+                        <td><span class="badge bg-secondary">{{ h.batch }}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success"
+                                    onclick="previewExcel('{{ url_for('preview_excel', filename=p[6].split('/')[-1]) }}')">
+                                <i class="bi bi-eye"></i> Lihat
+                            </button>
+
+                            <a href="/{{ h.file_path }}" download class="btn btn-success btn-sm">
+                                <i class="bi bi-download"></i> Unduh
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox display-4"></i>
+        <p class="mt-3">Belum ada hasil penetapan dari MDT manapun.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Pratinjau Excel -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-spreadsheet"></i> Pratinjau Dokumen Excel</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" style="height: 80vh;">
+        <iframe id="previewFrame" src="" style="width:100%;height:100%;border:none;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function previewExcel(url) {
+  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+  const iframe = document.getElementById('previewFrame');
+  iframe.src = url; // load preview halaman Flask
+  modal.show();
+}
+</script>
+
+{% endblock %}

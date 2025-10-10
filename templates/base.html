@@ -119,7 +119,7 @@
                 <a class="nav-link {% if request.path == '/pengajuan' %}active{% endif %}" href="{{ url_for('pengajuan_mdt') }}">
                     <i class="bi bi-pencil-square"></i> Pengajuan
                 </a>
-                <a class="nav-link {% if request.path == '/hasil_mdt' %}active{% endif %}" href="{{ url_for('hasil_mdt_view') }}">
+                <a class="nav-link {% if request.path == '/hasil_mdt' %}active{% endif %}" href="{{ url_for('hasil_mdt') }}">
                     <i class="bi bi-file-earmark-check"></i> Hasil
                 </a>
 
@@ -131,10 +131,16 @@
                 <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
                     <i class="bi bi-award"></i> Penetapan
                 </a>
+
+                <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
+                    <i class="bi bi-folder-check"></i> Hasil
+                </a>
+
                 <a class="nav-link {% if request.path == '/admin/users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
                     <i class="bi bi-people"></i> Kelola User
                 </a>
             {% endif %}
+
 
             <hr style="border-color: rgba(255,255,255,0.3);">
 

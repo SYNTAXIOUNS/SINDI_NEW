@@ -129,56 +129,78 @@ def update_status_pengajuan(pengajuan_id, status, alasan=None):
         conn.commit()
 
 def generate_nomor_ijazah_batch(pengajuan_id):
-    """Baca file Excel lulusan, buat nomor ijazah otomatis, simpan ke tabel nomor_ijazah"""
+    """Generate nomor ijazah otomatis sesuai struktur kolom DAFTAR PENETAPAN MDT"""
+    import pandas as pd, os
+    from datetime import datetime
+
     with _conn() as conn:
         c = conn.cursor()
-        c.execute("SELECT file_lulusan, jenjang, tahun_pelajaran FROM pengajuan WHERE id=?", (pengajuan_id,))
+        c.execute("SELECT file_lulusan, jenjang, tahun_pelajaran, nama_mdt FROM pengajuan WHERE id=?", (pengajuan_id,))
         data = c.fetchone()
         if not data:
             raise Exception("Data pengajuan tidak ditemukan.")
 
-        file_path, jenjang, tahun = data
+        file_path, jenjang, tahun, nama_mdt = data
+        if not os.path.exists(file_path):
+            raise Exception(f"File Excel {file_path} tidak ditemukan.")
 
-        # Mapping jenjang ke kode singkat
-        kode_jenjang = {
-            "Ula": "I",
-            "Wustha": "II",
-            "Ulya": "III",
-            "Al-Jami’ah": "IV"
-        }.get(jenjang, "I")
+        # Mapping jenjang ke kode
+        kode_jenjang = {"Ula": "I", "Wustha": "II", "Ulya": "III", "Al-Jami’ah": "IV"}.get(jenjang, "I")
 
-        # Baca file Excel santri
+        # Baca Excel (header otomatis)
         df = pd.read_excel(file_path)
-        nama_col = df.columns[0]
-        nis_col = df.columns[1]
+        df = df.dropna(how='all')  # hapus baris kosong
+
+        # Normalisasi nama kolom ke lowercase untuk pencarian fleksibel
+        df.columns = [str(c).strip().lower() for c in df.columns]
+
+        # Cari kolom nama santri dan nomor induk santri
+        nama_col = next((col for col in df.columns if "nama santri" in col), None)
+        nis_col = next((col for col in df.columns if "nomor induk" in col or "nis" in col), None)
+
+        if not nama_col or not nis_col:
+            raise Exception("Kolom 'Nama santri' atau 'Nomor Induk Santri' tidak ditemukan di Excel!")
+
+        # Hitung awal nomor ijazah
+        c.execute("SELECT COUNT(*) FROM nomor_ijazah")
+        start_count = c.fetchone()[0] or 0
 
         # Generate nomor ijazah
-        c.execute("SELECT COUNT(*) FROM nomor_ijazah")
-        start_count = c.fetchone()[0]
-
-        generated_rows = []
+        nomor_ijazah_list, generated_rows = [], []
         for i, row in df.iterrows():
             nomor_urut = str(start_count + i + 1).zfill(6)
             nomor_ijazah = f"MDT-12-{kode_jenjang}-{tahun}-{nomor_urut}"
+            nomor_ijazah_list.append(nomor_ijazah)
             generated_rows.append((
                 pengajuan_id,
-                str(row[nama_col]),
-                str(row[nis_col]),
+                str(row[nama_col]).strip(),
+                str(row[nis_col]).strip(),
                 nomor_ijazah,
                 tahun,
                 jenjang
             ))
 
-        # Simpan ke tabel nomor_ijazah
+        # Tambahkan kolom baru ke Excel
+        df["Nomor Ijazah"] = nomor_ijazah_list
+
+        hasil_dir = "hasil_excel"
+        os.makedirs(hasil_dir, exist_ok=True)
+        output_file = f"HASIL_{nama_mdt}_{tahun}_{jenjang}.xlsx"
+        output_path = os.path.join(hasil_dir, output_file)
+        df.to_excel(output_path, index=False)
+
+        # Simpan ke DB
         c.executemany("""
             INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang)
             VALUES (?, ?, ?, ?, ?, ?)
         """, generated_rows)
-
-        # Update status pengajuan
         c.execute("UPDATE pengajuan SET status='Ditetapkan' WHERE id=?", (pengajuan_id,))
         conn.commit()
-        return len(generated_rows)
+
+        print(f"✅ {len(generated_rows)} nomor ijazah berhasil dibuat untuk {nama_mdt}")
+        print(f"📁 File hasil: {output_path}")
+
+        return output_file
 
 # ======================
 # MDT: LIHAT HASIL PENETAPAN
@@ -307,6 +329,40 @@ def list_hasil_nomor_ijazah_by_mdt(mdt_kode):
         """, (mdt_kode,))
         return c.fetchall()
 
+def list_hasil_penetapan(kode_mdt=None):
+    """Ambil daftar pengajuan yang sudah ditetapkan (dengan file hasil)"""
+    with _conn() as conn:
+        c = conn.cursor()
+        if kode_mdt:
+            c.execute("""
+                SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, nomor_batch
+                FROM pengajuan
+                WHERE status='Ditetapkan' AND nama_mdt=?
+                ORDER BY id DESC
+            """, (kode_mdt,))
+        else:
+            c.execute("""
+                SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, nomor_batch
+                FROM pengajuan
+                WHERE status='Ditetapkan'
+                ORDER BY id DESC
+            """)
+        data = c.fetchall()
+        results = []
+        for row in data:
+            pengajuan_id = row[0]
+            hasil_path = f"hasil_excel/HASIL_{row[1]}_{row[3]}_{row[2]}.xlsx"
+            if os.path.exists(hasil_path):
+                results.append({
+                    "id": pengajuan_id,
+                    "nama_mdt": row[1],
+                    "jenjang": row[2],
+                    "tahun": row[3],
+                    "jumlah": row[4],
+                    "batch": row[5],
+                    "file_path": hasil_path
+                })
+        return results
 
 def get_nama_mdt_by_kode(kode_mdt):
     with _conn() as conn:

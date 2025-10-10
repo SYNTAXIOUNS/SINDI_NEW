@@ -26,7 +26,8 @@ import pandas as pd
 # ====== APP CONFIG ======
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = "sindi_secret_key_please_change"
-DB_NAME = "sindi.db"
+DB_NAME = r"D:/Pribados/Project/SINDI/sindi.db"
+
 
 UPLOAD_DIR = "uploads"
 ALLOWED_EXT = {"pdf", "xls", "xlsx"}
@@ -242,16 +243,22 @@ def pengajuan_mdt():
     pengajuans = list_pengajuan_batch_by_mdt(user["id"])
     return render_template("pengajuan.html", user=user, pengajuans=pengajuans)
 
-@app.route("/hasil_mdt", methods=["GET"])
+@app.route("/hasil_mdt")
 @require_role("mdt")
-def hasil_mdt_view():
-    from services.mdt_service import list_hasil_nomor_ijazah_by_mdt, get_nama_mdt_by_kode
+def hasil_mdt():
+    from services.mdt_service import list_hasil_penetapan
     user = current_user()
-    hasil = list_hasil_nomor_ijazah_by_mdt(user["kode_mdt"])
-    nama_mdt = get_nama_mdt_by_kode(user["kode_mdt"])
+    hasil_list = list_hasil_penetapan(kode_mdt=user["kode_mdt"])
+    return render_template("hasil_mdt.html", user=user, hasil_list=hasil_list)
 
-    return render_template("hasil.html", user=user, hasil=hasil, nama_mdt=nama_mdt)
 
+@app.route("/hasil_kanwil")
+@require_role("kanwil")
+def hasil_kanwil():
+    from services.mdt_service import list_hasil_penetapan
+    user = current_user()
+    hasil_list = list_hasil_penetapan()
+    return render_template("hasil_kanwil.html", user=user, hasil_list=hasil_list)
 
 # ==============================
 #  KANKEMENAG: Verifikasi (unggah rekomendasi)
@@ -319,6 +326,12 @@ def penetapan_kanwil():
     pengajuan_list = list_pengajuan_for_kanwil()
     return render_template("penetapan.html", user=user, pengajuan_list=pengajuan_list)
 
+@app.route("/hasil/download/<path:filename>")
+def download_hasil(filename):
+    from flask import send_from_directory
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    return send_from_directory(hasil_dir, filename, as_attachment=True)
+
 @app.route("/penetapan/export/<string:mode>/<int:pengajuan_id>")
 @require_role("kanwil")
 def export_penetapan(mode, pengajuan_id):
@@ -344,13 +357,25 @@ def export_penetapan(mode, pengajuan_id):
 #  MDT: Lihat Hasil Penetapan
 # ==============================
 @app.route("/hasil")
-@require_role("mdt")
-def hasil_mdt():
+@require_role(["mdt", "kanwil"])
+def hasil():
     from services.mdt_service import get_nomor_ijazah_by_pengajuan
     user = current_user()
-    with sqlite3.connect("sindi.db") as conn:
+
+    with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
-        c.execute("SELECT id, nomor_batch, nama_mdt, status FROM pengajuan WHERE mdt_id=? ORDER BY id DESC", (user["id"],))
+
+        if user["role"] == "mdt":
+            c.execute("""
+                SELECT id, nomor_batch, nama_mdt, status, tahun_pelajaran, jenjang
+                FROM pengajuan WHERE mdt_id=? AND status='Ditetapkan' ORDER BY id DESC
+            """, (user["id"],))
+        else:  # Kanwil
+            c.execute("""
+                SELECT id, nomor_batch, nama_mdt, status, tahun_pelajaran, jenjang
+                FROM pengajuan WHERE status='Ditetapkan' ORDER BY id DESC
+            """)
+
         pengajuan_list = c.fetchall()
 
     results = []
@@ -360,6 +385,7 @@ def hasil_mdt():
             results.append((p, data))
 
     return render_template("hasil.html", user=user, results=results)
+
 
 # ==============================
 #  ADMIN KANWIL: Manajemen User
@@ -412,6 +438,46 @@ def serve_upload(filename):
     
     # Kirim file
     return send_from_directory(uploads_dir, filename, as_attachment=False)
+
+# =============================================
+# Serve folder hasil_excel (untuk file hasil ijazah)
+# =============================================
+@app.route("/hasil_excel/<path:filename>")
+def serve_hasil_excel(filename):
+    import os
+    from flask import send_from_directory, abort
+
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    file_path = os.path.join(hasil_dir, filename)
+
+    if not os.path.exists(file_path):
+        abort(404)
+
+    return send_from_directory(hasil_dir, filename, as_attachment=False)
+
+# ======================================================
+# ✅ Preview file Excel hasil penetapan ijazah (langsung dibaca)
+# ======================================================
+@app.route("/preview_excel/<path:filename>")
+def preview_excel(filename):
+    import os
+    import pandas as pd
+    from flask import render_template, abort
+
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    file_path = os.path.join(hasil_dir, filename)
+
+    if not os.path.exists(file_path):
+        abort(404)
+
+    try:
+        df = pd.read_excel(file_path)
+        # Batasi maksimal 200 baris agar ringan
+        df_html = df.head(200).to_html(classes="table table-striped table-bordered", index=False)
+    except Exception as e:
+        df_html = f"<div class='alert alert-danger'>Gagal membaca file Excel: {e}</div>"
+
+    return render_template("preview_excel.html", table_html=df_html, filename=filename)
 
 @app.route("/preview-file/<path:filename>")
 def preview_file(filename):
