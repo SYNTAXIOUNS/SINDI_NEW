@@ -27,8 +27,55 @@ from urllib.parse import unquote
 # ====== APP CONFIG ======
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = "sindi_secret_key_please_change"
-DB_NAME = r"D:/Pribados/Project/SINDI/sindi.db"
+# =======================================
+# Database Path (Render + Lokal Compatible)
+# =======================================
 
+# Tentukan base folder aplikasi
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Folder instance (aman untuk write di Render)
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+
+# Nama file database SQLite lokal
+DB_NAME = os.path.join(INSTANCE_DIR, "sindi.db")
+
+# Debug log (cek di log Render)
+print(f"📁 Database Path Aktif: {DB_NAME}")
+
+# =======================================
+# Opsional: Jika nanti DATABASE_URL (PostgreSQL) tersedia
+# maka otomatis gunakan PostgreSQL
+# =======================================
+import sqlite3
+import psycopg2
+from urllib.parse import urlparse
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_connection():
+    """
+    Otomatis pakai PostgreSQL di Render,
+    fallback ke SQLite di lokal.
+    """
+    if DATABASE_URL:
+        try:
+            result = urlparse(DATABASE_URL)
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port
+            )
+            print("✅ Terkoneksi ke PostgreSQL")
+            return conn
+        except Exception as e:
+            print(f"⚠️ Gagal konek PostgreSQL: {e}, fallback ke SQLite")
+
+    print("🔸 Menggunakan SQLite lokal:", DB_NAME)
+    return sqlite3.connect(DB_NAME)
 
 UPLOAD_DIR = "uploads"
 ALLOWED_EXT = {"pdf", "xls", "xlsx"}
