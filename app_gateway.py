@@ -59,12 +59,10 @@ app.secret_key = "sindi_secret_key_please_change"
 # Tentukan base folder aplikasi
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Folder instance (aman untuk write di Render)
-INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
-os.makedirs(INSTANCE_DIR, exist_ok=True)
-
-# Nama file database SQLite lokal
+# Gunakan /tmp agar bisa write di Render
+INSTANCE_DIR = "/tmp"
 DB_NAME = os.path.join(INSTANCE_DIR, "sindi.db")
+os.makedirs(INSTANCE_DIR, exist_ok=True)
 
 # Debug log (cek di log Render)
 print(f"📁 Database Path Aktif: {DB_NAME}")
