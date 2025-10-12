@@ -17,6 +17,30 @@
             <i class="bi bi-list-task"></i> Daftar Pengajuan Siap Ditetapkan
         </div>
         <div class="card-body table-responsive">
+            <form method="GET" class="row g-2 align-items-end mb-3">
+  <div class="col-md-5">
+    <label class="form-label fw-semibold">Kabupaten/Kota</label>
+    <select class="form-select" name="kabupaten">
+      <option value="">Semua Kabupaten</option>
+      {% for kab in daftar_kabupaten %}
+        <option value="{{ kab[1] }}" {% if request.args.get('kabupaten') == kab[1] %}selected{% endif %}>{{ kab[1] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-5">
+    <label class="form-label fw-semibold">Jenjang</label>
+    <select class="form-select" name="jenjang">
+      <option value="">Semua Jenjang</option>
+      <option value="Ula">Ula</option>
+      <option value="Wustha">Wustha</option>
+      <option value="Ulya">Ulya</option>
+      <option value="Al-Jami’ah">Al-Jami’ah</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button type="submit" class="btn btn-success w-100"><i class="bi bi-funnel"></i> Filter</button>
+  </div>
+</form>
             <table class="table table-hover align-middle text-center">
                 <thead class="table-success">
                     <tr>

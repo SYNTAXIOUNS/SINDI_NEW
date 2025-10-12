@@ -22,6 +22,7 @@ from flask import send_from_directory, abort
 import os
 from flask import render_template
 import pandas as pd
+from urllib.parse import unquote
 
 # ====== APP CONFIG ======
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -205,24 +206,26 @@ def dashboard():
 # ==============================
 #  MDT: Pengajuan Batch + Upload Excel/PDF
 # ==============================
-@app.route("/pengajuan", methods=["GET","POST"])
+@app.route("/pengajuan", methods=["GET", "POST"])
 @require_role("mdt")
 def pengajuan_mdt():
     user = current_user()
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM master_kabupaten ORDER BY nama_kabupaten ASC")
+    daftar_kabupaten = c.fetchall()
+    conn.close()
 
     if request.method == "POST":
-        nama_mdt = (request.form.get("nama_mdt") or user["kode_mdt"] or "MDT").strip()
-        jenjang = (request.form.get("jenjang") or "").strip()                 # Ula/Wustha/Ulya/Al-Jami’ah
-        tahun   = (request.form.get("tahun_pelajaran") or "").strip()         # 2024/2025
-        jumlah  = (request.form.get("jumlah_lulus") or "0").strip()
-
+        nama_mdt = (request.form.get("nama_mdt") or user["kode_mdt"]).strip()
+        kabupaten = request.form.get("kabupaten")
+        jenjang = request.form.get("jenjang")
+        tahun = request.form.get("tahun_pelajaran")
+        jumlah = request.form.get("jumlah_lulus")
         file = request.files.get("file_lulusan")
+
         if not file or file.filename == "":
             flash("File daftar lulusan wajib diunggah (PDF/Excel).", "warning")
-            return redirect(url_for("pengajuan_mdt"))
-
-        if not allowed_file(file.filename):
-            flash("Format file harus PDF/XLS/XLSX.", "danger")
             return redirect(url_for("pengajuan_mdt"))
 
         filename = f"{user['kode_mdt']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
@@ -237,56 +240,90 @@ def pengajuan_mdt():
             jumlah_lulus=jumlah,
             file_lulusan_path=save_path
         )
+
+        # Simpan kabupaten juga
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("UPDATE pengajuan SET kabupaten=? WHERE nomor_batch=?", (kabupaten, nomor_batch))
+            conn.commit()
+
         flash(f"Pengajuan terkirim. Nomor Batch: {nomor_batch}", "success")
         return redirect(url_for("pengajuan_mdt"))
 
     pengajuans = list_pengajuan_batch_by_mdt(user["id"])
-    return render_template("pengajuan.html", user=user, pengajuans=pengajuans)
+    return render_template("pengajuan.html", user=user, pengajuans=pengajuans, daftar_kabupaten=daftar_kabupaten)
 
 @app.route("/hasil_mdt")
 @require_role("mdt")
 def hasil_mdt():
-    from services.mdt_service import list_hasil_penetapan
+    """
+    Halaman MDT untuk melihat hasil penetapan nomor ijazah mereka sendiri.
+    File diambil dari folder hasil_excel/ berdasarkan kode MDT pengguna.
+    """
+    import os
+    from flask import render_template
     user = current_user()
-    hasil_list = list_hasil_penetapan(kode_mdt=user["kode_mdt"])
+
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    hasil_list = []
+
+    if os.path.exists(hasil_dir):
+        for f in os.listdir(hasil_dir):
+            if user["kode_mdt"] in f:  # contoh: HASIL_MDT001_2024_Ula.xlsx
+                # parsing nama file: HASIL_<kode>_<tahun>_<jenjang>.xlsx
+                parts = f.replace(".xlsx", "").split("_")
+                tahun = parts[2] if len(parts) > 2 else "-"
+                jenjang = parts[3] if len(parts) > 3 else "-"
+                hasil_list.append({
+                    "file_name": f,
+                    "file_path": f"hasil_excel/{f}",
+                    "jenjang": jenjang,
+                    "tahun": tahun
+                })
+
     return render_template("hasil_mdt.html", user=user, hasil_list=hasil_list)
 
-
 @app.route("/hasil_kanwil")
-@require_role("kanwil")
+@require_role("kanwil", "admin")
 def hasil_kanwil():
     from services.mdt_service import list_hasil_penetapan
-    user = current_user()
+    from services.auth_service import current_user
+
+    kabupaten_dipilih = request.args.get("kabupaten", "")
+    jenjang_dipilih = request.args.get("jenjang", "")
+
+    # Ambil semua data hasil penetapan dari service
     hasil_list = list_hasil_penetapan()
-    return render_template("hasil_kanwil.html", user=user, hasil_list=hasil_list)
+
+    # Tambahkan kolom kabupaten fallback bila belum ada
+    for h in hasil_list:
+        if "kabupaten" not in h:
+            h["kabupaten"] = h.get("wilayah", "Tidak diketahui")
+
+    # Filter berdasarkan kabupaten & jenjang
+    if kabupaten_dipilih:
+        hasil_list = [h for h in hasil_list if h.get("kabupaten") == kabupaten_dipilih]
+    if jenjang_dipilih:
+        hasil_list = [h for h in hasil_list if h.get("jenjang") == jenjang_dipilih]
+
+    # Daftar dropdown unik
+    semua_data = list_hasil_penetapan()
+    daftar_kabupaten = sorted(list({h.get("kabupaten") for h in semua_data}))
+    daftar_jenjang = sorted(list({h.get("jenjang") for h in semua_data}))
+
+    return render_template(
+        "hasil_kanwil.html",
+        user=current_user(),  # ✅ fix utama agar tidak undefined
+        hasil_list=hasil_list,
+        daftar_kabupaten=daftar_kabupaten,
+        daftar_jenjang=daftar_jenjang,
+        kabupaten_dipilih=kabupaten_dipilih,
+        jenjang_dipilih=jenjang_dipilih,
+    )
 
 # ==============================
 #  KANKEMENAG: Verifikasi (unggah rekomendasi)
 # ==============================
-# @app.route("/verifikasi", methods=["GET", "POST"])
-#@require_role("kankemenag")
-#def verifikasi_kemenag():
-    from services.mdt_service import list_pengajuan_for_kemenag, update_status_pengajuan
-    user = current_user()
-
-    if request.method == "POST":
-        pengajuan_id = request.form.get("pengajuan_id")
-        status = request.form.get("status")
-        alasan = request.form.get("alasan", "").strip() or None
-        verifikator = user["username"]
-
-        update_status_pengajuan(pengajuan_id, status, alasan, verifikator)
-
-        if status == "Diverifikasi":
-            flash(f"✅ Pengajuan diverifikasi oleh {verifikator} dan dikirim ke Kanwil.", "success")
-        else:
-            flash(f"⚠️ Pengajuan ditolak oleh {verifikator}.", "warning")
-
-        return redirect(url_for("verifikasi_kemenag"))
-
-    pengajuan_list = list_pengajuan_for_kemenag()
-    return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
-
 @app.route("/verifikasi", methods=["GET", "POST"])
 @require_role("kankemenag")
 def verifikasi_kemenag():
@@ -309,22 +346,31 @@ def verifikasi_kemenag():
 #  KANWIL: Penetapan + Export (Excel/PDF)
 # ==============================
 @app.route("/penetapan", methods=["GET", "POST"])
-@require_role("kanwil")
+@require_role("kanwil","admin")
 def penetapan_kanwil():
-    from services.mdt_service import list_pengajuan_for_kanwil, generate_nomor_ijazah_batch
     user = current_user()
+    kab_filter = request.args.get("kabupaten")
+    jenjang_filter = request.args.get("jenjang")
 
-    if request.method == "POST":
-        pengajuan_id = request.form.get("pengajuan_id")
-        try:
-            jumlah = generate_nomor_ijazah_batch(pengajuan_id)
-            flash(f"✅ {jumlah} nomor ijazah berhasil ditetapkan.", "success")
-        except Exception as e:
-            flash(f"❌ Gagal menetapkan nomor ijazah: {e}", "danger")
-        return redirect(url_for("penetapan_kanwil"))
+    query = "SELECT * FROM pengajuan WHERE status='Diverifikasi'"
+    params = []
 
-    pengajuan_list = list_pengajuan_for_kanwil()
-    return render_template("penetapan.html", user=user, pengajuan_list=pengajuan_list)
+    if kab_filter:
+        query += " AND kabupaten=?"
+        params.append(kab_filter)
+    if jenjang_filter:
+        query += " AND jenjang=?"
+        params.append(jenjang_filter)
+
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute(query, params)
+        pengajuan_list = c.fetchall()
+
+        c.execute("SELECT * FROM master_kabupaten ORDER BY nama_kabupaten ASC")
+        daftar_kabupaten = c.fetchall()
+
+    return render_template("penetapan.html", user=user, pengajuan_list=pengajuan_list, daftar_kabupaten=daftar_kabupaten)
 
 @app.route("/hasil/download/<path:filename>")
 def download_hasil(filename):
@@ -458,26 +504,33 @@ def serve_hasil_excel(filename):
 # ======================================================
 # ✅ Preview file Excel hasil penetapan ijazah (langsung dibaca)
 # ======================================================
+from urllib.parse import unquote
+import os
+import pandas as pd
+from flask import render_template
+
 @app.route("/preview_excel/<path:filename>")
 def preview_excel(filename):
-    import os
-    import pandas as pd
-    from flask import render_template, abort
+    filename = unquote(filename)  # decode karakter khusus seperti spasi, tanda petik, dll
 
+    # 🔹 Ganti direktori ke folder hasil_excel
     hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
     file_path = os.path.join(hasil_dir, filename)
 
     if not os.path.exists(file_path):
-        abort(404)
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan: {file_path}</h4>"
 
     try:
-        df = pd.read_excel(file_path)
-        # Batasi maksimal 200 baris agar ringan
-        df_html = df.head(200).to_html(classes="table table-striped table-bordered", index=False)
-    except Exception as e:
-        df_html = f"<div class='alert alert-danger'>Gagal membaca file Excel: {e}</div>"
+        # tampilkan semua baris dan kolom
+        pd.set_option("display.max_rows", None)
+        pd.set_option("display.max_columns", None)
 
-    return render_template("preview_excel.html", table_html=df_html, filename=filename)
+        df = pd.read_excel(file_path)
+        df_html = df.to_html(classes="table table-bordered table-striped", index=False)
+
+        return render_template("preview_excel.html", table_html=df_html, filename=filename)
+    except Exception as e:
+        return f"<h4 class='text-danger'>❌ Gagal memuat file Excel:<br>{e}</h4>"
 
 @app.route("/preview-file/<path:filename>")
 def preview_file(filename):
@@ -520,6 +573,33 @@ def preview_file(filename):
             </a></p>
         </div>
         """
+# ==============================
+#  ADMIN
+# ==============================
+
+@app.route("/admin/kabupaten", methods=["GET", "POST"])
+@require_role("admin")
+def admin_kabupaten():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    if request.method == "POST":
+        nama_kabupaten = request.form.get("nama_kabupaten").strip()
+        provinsi = "Jawa Barat"
+        if nama_kabupaten:
+            c.execute("""
+                INSERT OR IGNORE INTO master_kabupaten (nama_kabupaten, provinsi)
+                VALUES (?, ?)
+            """, (nama_kabupaten, provinsi))
+            conn.commit()
+            flash("✅ Kabupaten/Kota berhasil ditambahkan.", "success")
+        else:
+            flash("⚠️ Nama kabupaten/kota tidak boleh kosong.", "warning")
+
+    c.execute("SELECT * FROM master_kabupaten ORDER BY nama_kabupaten ASC")
+    data = c.fetchall()
+    conn.close()
+    return render_template("admin_kabupaten.html", user=current_user(), data=data)
 
 # ==============================
 #  RUN

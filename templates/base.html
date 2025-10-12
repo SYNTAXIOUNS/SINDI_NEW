@@ -115,7 +115,20 @@
                 <i class="bi bi-speedometer2"></i> Dashboard
             </a>
 
-            {% if user.role == 'mdt' %}
+            {% if user.role == 'kanwil' %}
+                <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
+                    <i class="bi bi-award"></i> Penetapan
+                </a>
+                <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
+                    <i class="bi bi-archive"></i> Hasil
+                </a>
+
+            {% elif user.role == 'kankemenag' %}
+                <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
+                    <i class="bi bi-shield-check"></i> Verifikasi
+                </a>
+
+            {% elif user.role == 'mdt' %}
                 <a class="nav-link {% if request.path == '/pengajuan' %}active{% endif %}" href="{{ url_for('pengajuan_mdt') }}">
                     <i class="bi bi-pencil-square"></i> Pengajuan
                 </a>
@@ -123,24 +136,26 @@
                     <i class="bi bi-file-earmark-check"></i> Hasil
                 </a>
 
-            {% elif user.role == 'kankemenag' %}
-                <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
-                    <i class="bi bi-shield-check"></i> Verifikasi
+            {% elif user.role == 'admin' %}
+                <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                    <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
-            {% elif user.role == 'kanwil' %}
                 <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
                     <i class="bi bi-award"></i> Penetapan
                 </a>
-
                 <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
-                    <i class="bi bi-folder-check"></i> Hasil
+                    <i class="bi bi-archive"></i> Hasil
                 </a>
-
                 <a class="nav-link {% if request.path == '/admin/users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
                     <i class="bi bi-people"></i> Kelola User
                 </a>
+                <a class="nav-link {% if request.path == '/admin/kabupaten' %}active{% endif %}" href="{{ url_for('admin_kabupaten') }}">
+                    <i class="bi bi-geo-alt"></i> Master Kabupaten
+                </a>
+                <a class="nav-link {% if request.path == '/admin/log' %}active{% endif %}" href="{{ url_for('admin_log') }}">
+                    <i class="bi bi-journal-text"></i> Log Aktivitas
+                </a>
             {% endif %}
-
 
             <hr style="border-color: rgba(255,255,255,0.3);">
 
