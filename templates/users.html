@@ -1,64 +1,143 @@
 {% extends 'base.html' %}
 {% block content %}
-  <h4>Manajemen User (Kanwil)</h4>
-  <div class="row g-3">
-    <div class="col-lg-5">
-      <div class="card card-body">
-        <h6 class="mb-3">Tambah User Baru</h6>
-        <form method="POST">
-          <div class="mb-2">
-            <label class="form-label">Username</label>
-            <input name="username" class="form-control" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Password (default 123 jika kosong)</label>
-            <input name="password" class="form-control">
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Role</label>
-            <select name="role" class="form-select" required>
-              <option value="mdt">MDT</option>
-              <option value="kankemenag">Kankemenag</option>
-              <option value="kanwil">Kanwil</option>
-            </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Kode MDT (opsional, wajib untuk role MDT)</label>
-            <input name="kode_mdt" class="form-control" placeholder="MDTXXX">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Wilayah (opsional)</label>
-            <input name="wilayah" class="form-control" placeholder="Kota/Kab">
-          </div>
-          <button class="btn btn-primary w-100">Simpan</button>
-        </form>
+<div class="container-fluid px-4">
+  <div class="row g-4">
+    <!-- FORM TAMBAH USER -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-header bg-success text-white">
+          <i class="bi bi-person-plus"></i> Tambah User Baru
+        </div>
+        <div class="card-body">
+          <form method="POST">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Username (NSPP / akun)</label>
+              <input type="text" name="username" class="form-control" required placeholder="3123xxxxxxx">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Password</label>
+              <input type="password" name="password" class="form-control" placeholder="Kosongkan untuk default: 123">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Role</label>
+              <select name="role" class="form-select" required>
+                <option value="">Pilih Role</option>
+                <option value="mdt">MDT</option>
+                <option value="kankemenag">Kankemenag</option>
+                <option value="kanwil">Kanwil</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Kode MDT (Opsional)</label>
+              <input type="text" name="kode_mdt" class="form-control" placeholder="MDT001 / kosongkan jika bukan MDT">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Wilayah / Kabupaten</label>
+              <input type="text" name="wilayah" class="form-control" placeholder="Contoh: Kota Cimahi">
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-success fw-semibold">
+                <i class="bi bi-check-circle"></i> Simpan
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
-    <div class="col-lg-7">
-      <div class="card card-body">
-        <h6 class="mb-3">Daftar User</h6>
-        <div class="table-responsive">
-          <table class="table table-bordered align-middle">
-            <thead class="table-light">
-              <tr><th>#</th><th>Username</th><th>Role</th><th>Kode MDT</th><th>Wilayah</th></tr>
-            </thead>
-            <tbody>
-              {% for u in users %}
-                <tr>
-                  <td>{{ u[0] }}</td>
-                  <td>{{ u[1] }}</td>
-                  <td><span class="badge text-bg-secondary">{{ u[2] }}</span></td>
-                  <td>{{ u[3] or '-' }}</td>
-                  <td>{{ u[4] or '-' }}</td>
-                </tr>
-              {% else %}
-                <tr><td colspan="5" class="text-center text-muted">Belum ada user.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+
+    <!-- DAFTAR USER -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-people"></i> Data Lembaga MDT (Interaktif)</span>
+          <span class="small text-white-50">Total: {{ users|length }}</span>
         </div>
-        <small class="text-muted">* Hapus/ubah user bisa ditambahkan di tahap berikutnya.</small>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table id="userTable" class="table table-hover align-middle table-bordered">
+              <thead class="table-success text-center">
+                <tr>
+                  <th>No</th>
+                  <th>NSPP</th>
+                  <th>Nama Lembaga</th>
+                  <th>Jenjang</th>
+                  <th>Kabupaten</th>
+                  <th>Kecamatan</th>
+                  <th>Alamat</th>
+                  <th>Afiliasi</th>
+                  <th>Role</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for u in users %}
+                <tr>
+                  <td>{{ loop.index }}</td>
+                  <td class="fw-bold">{{ u[1] }}</td>
+                  <td>{{ u[8] or '-' }}</td>
+                  <td>{{ u[10] or '-' }}</td>
+                  <td>{{ u[12] or '-' }}</td>
+                  <td>{{ u[13] or '-' }}</td>
+                  <td>{{ u[14] or '-' }}</td>
+                  <td>{{ u[16] or '-' }}</td>
+                  <td>
+                    <span class="badge bg-primary text-uppercase">{{ u[3] }}</span>
+                  </td>
+                  <td>
+                    <form method="POST" action="{{ url_for('reset_password', user_id=u[0]) }}" class="d-inline">
+                      <button type="submit" class="btn btn-sm btn-outline-warning"
+                              onclick="return confirm('Yakin ingin reset password {{ u[1] }} ke default (123)?')">
+                        <i class="bi bi-key"></i>
+                      </button>
+                    </form>
+
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
+</div>
+
+<!-- DATATABLES -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+<script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+
+<script>
+$(document).ready(function() {
+  $('#userTable').DataTable({
+    responsive: true,
+    dom: 'Bfrtip',
+    buttons: [
+      { extend: 'excel', className: 'btn btn-success btn-sm', text: '<i class="bi bi-file-earmark-excel"></i> Excel' },
+      { extend: 'pdf', className: 'btn btn-danger btn-sm', text: '<i class="bi bi-file-earmark-pdf"></i> PDF' },
+      { extend: 'print', className: 'btn btn-secondary btn-sm', text: '<i class="bi bi-printer"></i> Print' }
+    ],
+    language: {
+      search: "Cari:",
+      lengthMenu: "Tampilkan _MENU_ data",
+      info: "Menampilkan _START_ - _END_ dari _TOTAL_ data",
+      paginate: { previous: "Sebelumnya", next: "Berikutnya" },
+      zeroRecords: "Tidak ada data ditemukan"
+    }
+  });
+});
+</script>
+
 {% endblock %}

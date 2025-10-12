@@ -97,7 +97,54 @@ def init_db():
         )
         conn.commit()
 
+def init_master_kabupaten():
+    kabupaten_jabar = [
+        ("Kabupaten Bandung", "Jawa Barat"), ("Kabupaten Bandung Barat", "Jawa Barat"),
+        ("Kabupaten Bekasi", "Jawa Barat"), ("Kabupaten Bogor", "Jawa Barat"),
+        ("Kabupaten Ciamis", "Jawa Barat"), ("Kabupaten Cianjur", "Jawa Barat"),
+        ("Kabupaten Cirebon", "Jawa Barat"), ("Kabupaten Garut", "Jawa Barat"),
+        ("Kabupaten Indramayu", "Jawa Barat"), ("Kabupaten Karawang", "Jawa Barat"),
+        ("Kabupaten Kuningan", "Jawa Barat"), ("Kabupaten Majalengka", "Jawa Barat"),
+        ("Kabupaten Pangandaran", "Jawa Barat"), ("Kabupaten Purwakarta", "Jawa Barat"),
+        ("Kabupaten Subang", "Jawa Barat"), ("Kabupaten Sukabumi", "Jawa Barat"),
+        ("Kabupaten Sumedang", "Jawa Barat"), ("Kabupaten Tasikmalaya", "Jawa Barat"),
+        ("Kota Bandung", "Jawa Barat"), ("Kota Banjar", "Jawa Barat"),
+        ("Kota Bekasi", "Jawa Barat"), ("Kota Bogor", "Jawa Barat"),
+        ("Kota Cimahi", "Jawa Barat"), ("Kota Cirebon", "Jawa Barat"),
+        ("Kota Depok", "Jawa Barat"), ("Kota Sukabumi", "Jawa Barat"),
+        ("Kota Tasikmalaya", "Jawa Barat")
+    ]
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS master_kabupaten (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama_kabupaten TEXT NOT NULL UNIQUE,
+            provinsi TEXT NOT NULL
+        )
+        """)
+        c.executemany("""
+            INSERT OR IGNORE INTO master_kabupaten (nama_kabupaten, provinsi)
+            VALUES (?, ?)
+        """, kabupaten_jabar)
+        conn.commit()
+
+def init_master_jenjang():
+    jenjangs = [("Ula",), ("Wustha",), ("Ulya",), ("Al-Jami’ah",)]
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS master_jenjang (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama_jenjang TEXT NOT NULL UNIQUE
+        )
+        """)
+        c.executemany("INSERT OR IGNORE INTO master_jenjang (nama_jenjang) VALUES (?)", jenjangs)
+        conn.commit()
+
 init_db()
+init_master_kabupaten()
+init_master_jenjang()
 
 # ==============================
 #  ROOTS
@@ -209,29 +256,39 @@ def dashboard():
 @app.route("/pengajuan", methods=["GET", "POST"])
 @require_role("mdt")
 def pengajuan_mdt():
+    from services.mdt_service import list_kabupaten
     user = current_user()
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT * FROM master_kabupaten ORDER BY nama_kabupaten ASC")
-    daftar_kabupaten = c.fetchall()
-    conn.close()
 
+    # --- Ambil data dropdown dari database ---
+    kabupaten_list = list_kabupaten()
+
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT nama_jenjang FROM master_jenjang ORDER BY id ASC")
+        jenjang_list = [r[0] for r in c.fetchall()]
+
+    # --- Jika form dikirim (POST) ---
     if request.method == "POST":
-        nama_mdt = (request.form.get("nama_mdt") or user["kode_mdt"]).strip()
-        kabupaten = request.form.get("kabupaten")
-        jenjang = request.form.get("jenjang")
-        tahun = request.form.get("tahun_pelajaran")
-        jumlah = request.form.get("jumlah_lulus")
-        file = request.files.get("file_lulusan")
+        nama_mdt = (request.form.get("nama_mdt") or user["kode_mdt"] or "MDT").strip()
+        jenjang = (request.form.get("jenjang") or "").strip()
+        tahun = (request.form.get("tahun_pelajaran") or "").strip()
+        jumlah = (request.form.get("jumlah_lulus") or "0").strip()
+        kabupaten = (request.form.get("kabupaten") or "").strip()
 
+        file = request.files.get("file_lulusan")
         if not file or file.filename == "":
             flash("File daftar lulusan wajib diunggah (PDF/Excel).", "warning")
+            return redirect(url_for("pengajuan_mdt"))
+
+        if not allowed_file(file.filename):
+            flash("Format file harus PDF/XLS/XLSX.", "danger")
             return redirect(url_for("pengajuan_mdt"))
 
         filename = f"{user['kode_mdt']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
         save_path = os.path.join(UPLOAD_DIR, filename)
         file.save(save_path)
 
+        # Buat batch baru
         nomor_batch = create_pengajuan_batch(
             mdt_user=user,
             nama_mdt=nama_mdt,
@@ -241,17 +298,26 @@ def pengajuan_mdt():
             file_lulusan_path=save_path
         )
 
-        # Simpan kabupaten juga
+        # Simpan kabupaten di pengajuan
         with sqlite3.connect(DB_NAME) as conn:
             c = conn.cursor()
             c.execute("UPDATE pengajuan SET kabupaten=? WHERE nomor_batch=?", (kabupaten, nomor_batch))
             conn.commit()
 
-        flash(f"Pengajuan terkirim. Nomor Batch: {nomor_batch}", "success")
+        flash(f"✅ Pengajuan terkirim. Nomor Batch: {nomor_batch}", "success")
         return redirect(url_for("pengajuan_mdt"))
 
+    # --- Ambil daftar pengajuan yang sudah dikirim oleh MDT ini ---
     pengajuans = list_pengajuan_batch_by_mdt(user["id"])
-    return render_template("pengajuan.html", user=user, pengajuans=pengajuans, daftar_kabupaten=daftar_kabupaten)
+
+    # --- Kirim semua data ke template ---
+    return render_template(
+        "pengajuan.html",
+        user=user,
+        pengajuans=pengajuans,
+        kabupaten_list=kabupaten_list,
+        jenjang_list=jenjang_list
+    )
 
 @app.route("/hasil_mdt")
 @require_role("mdt")
@@ -284,7 +350,7 @@ def hasil_mdt():
     return render_template("hasil_mdt.html", user=user, hasil_list=hasil_list)
 
 @app.route("/hasil_kanwil")
-@require_role("kanwil", "admin")
+@require_role(["kanwil", "admin"])
 def hasil_kanwil():
     from services.mdt_service import list_hasil_penetapan
     from services.auth_service import current_user
@@ -346,7 +412,7 @@ def verifikasi_kemenag():
 #  KANWIL: Penetapan + Export (Excel/PDF)
 # ==============================
 @app.route("/penetapan", methods=["GET", "POST"])
-@require_role("kanwil","admin")
+@require_role(["kanwil","admin"])
 def penetapan_kanwil():
     user = current_user()
     kab_filter = request.args.get("kabupaten")
@@ -431,38 +497,6 @@ def hasil():
             results.append((p, data))
 
     return render_template("hasil.html", user=user, results=results)
-
-
-# ==============================
-#  ADMIN KANWIL: Manajemen User
-# ==============================
-@app.route("/admin/users", methods=["GET","POST"])
-@require_role("kanwil")
-def admin_users():
-    if request.method == "POST":
-        username = request.form.get("username","").strip()
-        password = request.form.get("password","").strip() or "123"
-        role     = request.form.get("role","").strip()
-        kode_mdt = request.form.get("kode_mdt","").strip() or None
-        wilayah  = request.form.get("wilayah","").strip() or None
-        ok, msg = create_user(username, password, role, kode_mdt, wilayah)
-        flash(msg, "success" if ok else "danger")
-        return redirect(url_for("admin_users"))
-    users = list_users()
-    return render_template("users.html", users=users, user=current_user())
-
-def list_pengajuan_for_kemenag():
-    """Ambil daftar pengajuan yang belum diverifikasi"""
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, 
-                   file_lulusan, created_at, status
-            FROM pengajuan
-            WHERE status IS NULL OR status='Diajukan'
-            ORDER BY created_at DESC
-        """)
-        return c.fetchall()
     
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
@@ -577,6 +611,79 @@ def preview_file(filename):
 #  ADMIN
 # ==============================
 
+@app.route("/admin/users", methods=["GET", "POST"])
+@require_role(["kanwil", "admin"])
+def admin_users():
+    import math
+
+    # === FORM SUBMIT TAMBAH USER ===
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip() or "123"
+        role = request.form.get("role", "").strip()
+        kode_mdt = request.form.get("kode_mdt", "").strip() or None
+        wilayah = request.form.get("wilayah", "").strip() or None
+
+        ok, msg = create_user(username, password, role, kode_mdt, wilayah)
+        flash(msg, "success" if ok else "danger")
+        return redirect(url_for("admin_users"))
+
+    # === PAGINATION ===
+    page = int(request.args.get("page", 1))
+    per_page = 50  # tampilkan 50 user per halaman
+    offset = (page - 1) * per_page
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+
+    # total data
+    c.execute("SELECT COUNT(*) FROM users")
+    total = c.fetchone()[0]
+
+    # ambil hanya data di halaman ini
+    c.execute("""
+        SELECT id, username, password, role, kode_mdt, wilayah
+        FROM users
+        ORDER BY id DESC
+        LIMIT ? OFFSET ?
+    """, (per_page, offset))
+    users = c.fetchall()
+    conn.close()
+
+    total_pages = math.ceil(total / per_page)
+
+    return render_template(
+        "users.html",
+        users=users,
+        user=current_user(),
+        page=page,
+        total_pages=total_pages,
+        total=total
+    )
+
+@app.route("/admin/log")
+@require_role("admin")
+def admin_log():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    # pastikan tabel log_aktivitas ada
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS log_aktivitas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        aksi TEXT,
+        waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    
+    # ambil data log terbaru
+    c.execute("SELECT username, aksi, waktu FROM log_aktivitas ORDER BY waktu DESC LIMIT 200")
+    data = c.fetchall()
+    conn.close()
+    
+    return render_template("admin_log.html", user=current_user(), log_list=data)
+
 @app.route("/admin/kabupaten", methods=["GET", "POST"])
 @require_role("admin")
 def admin_kabupaten():
@@ -602,7 +709,45 @@ def admin_kabupaten():
     return render_template("admin_kabupaten.html", user=current_user(), data=data)
 
 # ==============================
+#  ADMIN - RESET PASSWORD USER
+# ==============================
+@app.route("/admin/reset-password/<int:user_id>", methods=["POST"])
+@require_role(["admin", "kanwil"])
+def reset_password(user_id):
+    import sqlite3
+
+    new_password = "123"  # default reset password
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("UPDATE users SET password=? WHERE id=?", (new_password, user_id))
+        conn.commit()
+
+        # ambil username untuk log
+        c.execute("SELECT username FROM users WHERE id=?", (user_id,))
+        row = c.fetchone()
+        username = row[0] if row else "tidak diketahui"
+
+    # catat aktivitas reset password
+    try:
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO log_aktivitas (username, aksi)
+                VALUES (?, ?)
+            """, (current_user()["username"], f"Reset password untuk user '{username}'"))
+            conn.commit()
+    except:
+        pass  # biar tidak crash kalau tabel log belum ada
+
+    flash(f"🔑 Password user '{username}' telah direset ke default (123).", "info")
+    return redirect(url_for("admin_users"))
+
+# ==============================
 #  RUN
 # ==============================
 if __name__ == "__main__":
     app.run(debug=True)
+
+# biar bisa dikenali Render
+if __name__ == "app_gateway":
+    app = app

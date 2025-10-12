@@ -6,7 +6,8 @@ __pycache__/
 # Database & Uploads
 sindi.db
 uploads/
-
+HASIL_MDT001_2024_Al-Jami'ah.xlsx
+tambahan/
 # IDE
 .vscode/
 .idea/
@@ -15,8 +16,16 @@ uploads/
 .DS_Store
 Thumbs.db
 
+#
 style copy.html
 base copy.html
+#
 seed_kabupaten.py
+#
 bulk_create_mdt.py
+#
 update_pengajuan_table.py
+#
+DAFTAR PENETAPAN IJAZAH MDT KOTA CIMAHI.xlsx
+Lembaga_MDT_Bagian_1 (1).xlsx
+

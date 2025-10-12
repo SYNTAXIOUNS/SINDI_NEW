@@ -370,3 +370,19 @@ def get_nama_mdt_by_kode(kode_mdt):
         c.execute("SELECT username FROM users WHERE kode_mdt=?", (kode_mdt,))
         row = c.fetchone()
         return row[0] if row else kode_mdt
+
+def list_kabupaten():
+    import sqlite3
+    from app_gateway import DB_NAME
+
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        # ambil kolom nama_kabupaten saja
+        c.execute("SELECT nama_kabupaten FROM master_kabupaten ORDER BY nama_kabupaten ASC")
+        hasil = c.fetchall()
+
+    # ubah hasil tuple [(‘Kabupaten Bandung’,), (‘Kota Cimahi’,)] menjadi list ['Kabupaten Bandung', 'Kota Cimahi']
+    kabupaten_list = [row[0] for row in hasil]
+
+    print("DEBUG Kab:", kabupaten_list[:5])  # <-- opsional, buat ngecek isi di console
+    return kabupaten_list

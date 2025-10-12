@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="fw-bold text-success">
+      <i class="bi bi-geo-alt"></i> Master Kabupaten Jawa Barat
+    </h3>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addKabupatenModal">
+      <i class="bi bi-plus-circle"></i> Tambah Kabupaten
+    </button>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-success text-white">
+      <i class="bi bi-list"></i> Daftar Kabupaten
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-success">
+          <tr>
+            <th>No</th>
+            <th>Nama Kabupaten/Kota</th>
+            <th>Provinsi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in data %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ k[1] }}</td>
+            <td>{{ k[2] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah Kabupaten -->
+<div class="modal fade" id="addKabupatenModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Tambah Kabupaten Baru</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label fw-semibold">Nama Kabupaten/Kota</label>
+        <input type="text" class="form-control" name="nama_kabupaten" required>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-success">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

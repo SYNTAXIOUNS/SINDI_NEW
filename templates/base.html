@@ -110,59 +110,60 @@
         <img src="{{ url_for('static', filename='logo_kemenag.png') }}" alt="Logo Kemenag" class="logo">
         <h4>SINDI<br><small style="font-size: 12px; font-weight: 400;">Sistem Penomoran Ijazah MDT</small></h4>
 
+        <!-- SIDEBAR MENU -->
         <nav class="nav flex-column">
-            <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-speedometer2"></i> Dashboard
-            </a>
+          <!-- === Dashboard Universal === -->
+          <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" 
+            href="{{ url_for('dashboard') }}">
+            <i class="bi bi-speedometer2"></i> Dashboard
+          </a>
 
-            {% if user.role == 'kanwil' %}
-                <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
-                    <i class="bi bi-award"></i> Penetapan
-                </a>
-                <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
-                    <i class="bi bi-archive"></i> Hasil
-                </a>
+          <!-- === Kanwil & Admin (akses tinggi) === -->
+          {% if user.role in ['kanwil', 'admin'] %}
+              <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
+                  <i class="bi bi-award"></i> Penetapan
+              </a>
+              <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
+                  <i class="bi bi-archive"></i> Hasil
+              </a>
+          {% endif %}
 
-            {% elif user.role == 'kankemenag' %}
-                <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
-                    <i class="bi bi-shield-check"></i> Verifikasi
-                </a>
+          <!-- === MDT === -->
+          {% if user.role == 'mdt' %}
+              <a class="nav-link {% if request.path == '/pengajuan' %}active{% endif %}" href="{{ url_for('pengajuan_mdt') }}">
+                  <i class="bi bi-pencil-square"></i> Pengajuan
+              </a>
+              <a class="nav-link {% if request.path == '/hasil_mdt' %}active{% endif %}" href="{{ url_for('hasil_mdt') }}">
+                  <i class="bi bi-file-earmark-check"></i> Hasil
+              </a>
+          {% endif %}
 
-            {% elif user.role == 'mdt' %}
-                <a class="nav-link {% if request.path == '/pengajuan' %}active{% endif %}" href="{{ url_for('pengajuan_mdt') }}">
-                    <i class="bi bi-pencil-square"></i> Pengajuan
-                </a>
-                <a class="nav-link {% if request.path == '/hasil_mdt' %}active{% endif %}" href="{{ url_for('hasil_mdt') }}">
-                    <i class="bi bi-file-earmark-check"></i> Hasil
-                </a>
+          <!-- === Kankemenag === -->
+          {% if user.role == 'kankemenag' %}
+              <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
+                  <i class="bi bi-shield-check"></i> Verifikasi
+              </a>
+          {% endif %}
 
-            {% elif user.role == 'admin' %}
-                <a class="nav-link {% if request.path == '/dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a class="nav-link {% if request.path == '/penetapan' %}active{% endif %}" href="{{ url_for('penetapan_kanwil') }}">
-                    <i class="bi bi-award"></i> Penetapan
-                </a>
-                <a class="nav-link {% if request.path == '/hasil_kanwil' %}active{% endif %}" href="{{ url_for('hasil_kanwil') }}">
-                    <i class="bi bi-archive"></i> Hasil
-                </a>
-                <a class="nav-link {% if request.path == '/admin/users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
-                    <i class="bi bi-people"></i> Kelola User
-                </a>
-                <a class="nav-link {% if request.path == '/admin/kabupaten' %}active{% endif %}" href="{{ url_for('admin_kabupaten') }}">
-                    <i class="bi bi-geo-alt"></i> Master Kabupaten
-                </a>
-                <a class="nav-link {% if request.path == '/admin/log' %}active{% endif %}" href="{{ url_for('admin_log') }}">
-                    <i class="bi bi-journal-text"></i> Log Aktivitas
-                </a>
-            {% endif %}
+          <!-- === Admin Khusus Kanwil === -->
+          {% if user.role == 'admin' %}
+              <a class="nav-link {% if request.path == '/admin/users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
+                  <i class="bi bi-people"></i> Kelola User
+              </a>
+              <a class="nav-link {% if request.path == '/admin/kabupaten' %}active{% endif %}" href="{{ url_for('admin_kabupaten') }}">
+                  <i class="bi bi-geo-alt"></i> Master Kabupaten
+              </a>
+              <a class="nav-link {% if request.path == '/admin/log' %}active{% endif %}" href="{{ url_for('admin_log') }}">
+                  <i class="bi bi-journal-text"></i> Log Aktivitas
+              </a>
+          {% endif %}
 
-            <hr style="border-color: rgba(255,255,255,0.3);">
-
-            <a class="nav-link text-danger" href="{{ url_for('logout') }}">
-                <i class="bi bi-box-arrow-right"></i> Logout
-            </a>
+          <hr style="border-color: rgba(255,255,255,0.3);">
+          <a class="nav-link text-danger" href="{{ url_for('logout') }}">
+              <i class="bi bi-box-arrow-right"></i> Logout
+          </a>
         </nav>
+
     </div>
 
     <!-- KONTEN -->

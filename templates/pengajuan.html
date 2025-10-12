@@ -12,7 +12,7 @@
   </div>
 
   <!-- Modal Form Pengajuan Baru -->
-  <div class="modal fade" id="formPengajuanModal" tabindex="-1" aria-labelledby="formPengajuanModalLabel" aria-hidden="true">
+  <div class="modal fade" id="formPengajuanModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <form action="{{ url_for('pengajuan_mdt') }}" method="POST" enctype="multipart/form-data" class="modal-content shadow-sm border-0">
         <div class="modal-header bg-success text-white">
@@ -26,25 +26,24 @@
               <input type="text" class="form-control" name="nama_mdt" value="{{ user.kode_mdt }}" readonly>
             </div>
 
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Kabupaten/Kota</label>
-              <select class="form-select" name="kabupaten" required>
-                    <option value="">Pilih Kabupaten/Kota</option>
-                    {% for kab in daftar_kabupaten %}
-                        <option value="{{ kab[1] }}">{{ kab[1] }}</option>
-                    {% endfor %}
+            <div class="mb-3 col-md-6">
+              <label class="form-label fw-semibold">Kabupaten / Kota</label>
+              <select name="kabupaten" class="form-select">
+                <option value="">Pilih Kabupaten/Kota</option>
+                {% for kab in kabupaten_list %}
+                  <option value="{{ kab }}">{{ kab }}</option>
+                {% endfor %}
               </select>
 
             </div>
 
-            <div class="col-md-4">
+            <div class="mb-3 col-md-6">
               <label class="form-label fw-semibold">Jenjang</label>
-              <select class="form-select" name="jenjang" required>
+              <select name="jenjang" class="form-select" required>
                 <option value="">Pilih Jenjang</option>
-                <option value="Ula">Ula</option>
-                <option value="Wustha">Wustha</option>
-                <option value="Ulya">Ulya</option>
-                <option value="Al-Jami’ah">Al-Jami’ah</option>
+                {% for j in jenjang_list %}
+                  <option value="{{ j }}">{{ j }}</option>
+                {% endfor %}
               </select>
             </div>
 
@@ -66,7 +65,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-success"><i class="bi bi-send-check"></i> Kirim Pengajuan</button>
+          <button type="submit" class="btn btn-success"><i class="bi bi-send-check"></i> Kirim</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
         </div>
       </form>
@@ -74,7 +73,7 @@
   </div>
 
   <!-- Tabel Daftar Pengajuan -->
-  <div class="card shadow-sm border-0">
+  <div class="card shadow-sm border-0 mt-4">
     <div class="card-header bg-success text-white">
       <i class="bi bi-archive"></i> Daftar Pengajuan MDT
     </div>
@@ -85,13 +84,11 @@
           <tr>
             <th>No</th>
             <th>Nomor Batch</th>
-            <th>Kabupaten/Kota</th>
+            <th>Kota/Kabupaten</th>
             <th>Jenjang</th>
-            <th>Tahun Pelajaran</th>
-            <th>Jumlah Lulusan</th>
-            <th>Tanggal Pengajuan</th>
+            <th>Tahun</th>
+            <th>Jumlah</th>
             <th>Status</th>
-            <th>Berkas</th>
           </tr>
         </thead>
         <tbody>
@@ -99,11 +96,10 @@
           <tr>
             <td>{{ loop.index }}</td>
             <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
-            <td>{{ p[9] or '-' }}</td> <!-- kolom kabupaten -->
+            <td>{{ p[9] or '-' }}</td>
             <td>{{ p[3] }}</td>
             <td>{{ p[4] }}</td>
             <td>{{ p[5] }}</td>
-            <td>{{ p[7] }}</td>
             <td>
               {% if p[8] == 'Diverifikasi' %}
               <span class="badge bg-success">Diverifikasi</span>
@@ -111,15 +107,6 @@
               <span class="badge bg-primary">Ditetapkan</span>
               {% else %}
               <span class="badge bg-warning text-dark">{{ p[8] or 'Menunggu' }}</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if p[6] %}
-              <button class="btn btn-sm btn-outline-success" onclick="previewFile('{{ p[6] }}')">
-                <i class="bi bi-eye"></i> Lihat
-              </button>
-              {% else %}
-              <span class="text-muted">-</span>
               {% endif %}
             </td>
           </tr>
