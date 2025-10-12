@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 import sqlite3, os, datetime, psycopg2
-from urllib.parse import utlparse
+from urllib.parse import urlparse
 from werkzeug.utils import secure_filename
 
 # ====== SERVICES (pastikan fungsi-fungsi ini ada di services/*.py) ======
@@ -23,7 +23,6 @@ from flask import send_from_directory, abort
 from flask import render_template
 import pandas as pd
 from urllib.parse import unquote
-
 # -------------------------
 # koneksi database fleksibel
 # -------------------------
@@ -74,9 +73,7 @@ print(f"📁 Database Path Aktif: {DB_NAME}")
 # Opsional: Jika nanti DATABASE_URL (PostgreSQL) tersedia
 # maka otomatis gunakan PostgreSQL
 # =======================================
-import sqlite3
-import psycopg2
-from urllib.parse import urlparse
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
