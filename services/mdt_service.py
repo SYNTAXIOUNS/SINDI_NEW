@@ -373,7 +373,7 @@ def get_nama_mdt_by_kode(kode_mdt):
 
 def list_kabupaten():
     import sqlite3
-    from app_gateway import DB_NAME
+    from app import DB_NAME
 
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
