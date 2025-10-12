@@ -1,6 +1,37 @@
-flask
-pandas
-openpyxl
-reportlab
-gunicorn
-fpdf
+# --- CORE FLASK ---
+Flask==3.1.2
+Werkzeug==3.1.3
+Jinja2==3.1.6
+itsdangerous==2.2.0
+blinker==1.9.0
+
+# --- WSGI SERVER ---
+gunicorn==23.0.0
+
+# --- DATABASE & DATA HANDLING ---
+psycopg2-binary==2.9.10      # PostgreSQL connector
+sqlite-utils==3.36.0         # optional helper (safe fallback)
+pandas==2.3.3
+openpyxl==3.1.5
+numpy==2.3.3
+
+# --- PDF & EXCEL EXPORT ---
+reportlab==4.4.4
+fpdf==1.7.2
+et-xmlfile==2.0.0
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+packaging==25.0
+
+# --- WEB UI & FILE UPLOAD ---
+Pillow==11.3.0
+charset-normalizer==3.4.3
+click==8.3.0
+
+# --- OPTIONAL UTILITIES ---
+requests==2.32.3
+markupsafe==3.0.3
+
+# --- DEV/DEBUG (opsional tapi berguna di Render shell) ---
+ipython==8.29.0
