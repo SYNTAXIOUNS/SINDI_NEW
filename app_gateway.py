@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
-import sqlite3, os, datetime
+import sqlite3, os, datetime, psycopg2
+from urllib.parse import utlparse
 from werkzeug.utils import secure_filename
 
 # ====== SERVICES (pastikan fungsi-fungsi ini ada di services/*.py) ======
@@ -19,10 +20,35 @@ from services.mdt_service import (
 )
 from flask import send_file, jsonify
 from flask import send_from_directory, abort
-import os
 from flask import render_template
 import pandas as pd
 from urllib.parse import unquote
+
+# -------------------------
+# koneksi database fleksibel
+# -------------------------
+def get_connection():
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        try:
+            result = urlparse(db_url)
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port
+            )
+            print("✅ Terhubung ke PostgreSQL")
+            return conn
+        except Exception as e:
+            print("⚠️ Gagal konek ke PostgreSQL:", e)
+
+    # fallback ke SQLite
+    os.makedirs("instance", exist_ok=True)
+    sqlite_path = os.path.join("instance", "sindi.db")
+    print("🔸 Menggunakan SQLite:", sqlite_path)
+    return sqlite3.connect(sqlite_path)
 
 # ====== APP CONFIG ======
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -88,61 +114,79 @@ def allowed_file(filename: str) -> bool:
 #  INIT DATABASE (aman, idempotent)
 # ==============================
 def init_db():
-    with sqlite3.connect(DB_NAME) as conn:
-        c = conn.cursor()
-        # users
+    """Buat tabel utama bila belum ada"""
+    conn = get_connection()
+    c = conn.cursor()
+
+    print("🧱 Membuat tabel bila belum ada...")
+
+    # users
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        kode_mdt TEXT,
+        wilayah TEXT
+    )
+    """)
+
+    # pengajuan
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS pengajuan (
+        id SERIAL PRIMARY KEY,
+        nama_mdt TEXT,
+        jenjang TEXT,
+        tahun_pelajaran TEXT,
+        jumlah_lulus INTEGER,
+        file_lulusan TEXT,
+        tanggal_pengajuan TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT,
+        nomor_batch TEXT,
+        rekomendasi_file TEXT,
+        mdt_id INTEGER,
+        kabupaten TEXT
+    )
+    """)
+
+    # nomor_ijazah
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS nomor_ijazah (
+        id SERIAL PRIMARY KEY,
+        pengajuan_id INTEGER,
+        nama_santri TEXT,
+        nis TEXT,
+        nomor_ijazah TEXT,
+        tahun TEXT,
+        jenjang TEXT
+    )
+    """)
+
+    # log aktivitas
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS log_aktivitas (
+        id SERIAL PRIMARY KEY,
+        username TEXT,
+        aksi TEXT,
+        waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # tambahkan akun default bila kosong
+    c.execute("SELECT COUNT(*) FROM users")
+    if c.fetchone()[0] == 0:
         c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            kode_mdt TEXT,
-            wilayah TEXT
-        )
+        INSERT INTO users (username, password, role, kode_mdt, wilayah) VALUES
+        ('admin', '123', 'admin', NULL, 'Kanwil Jawa Barat'),
+        ('kanwil', '123', 'kanwil', NULL, 'Jawa Barat'),
+        ('kankemenag', '123', 'kankemenag', NULL, 'Kota Bandung')
         """)
-        # pengajuan (batch MDT)
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS pengajuan (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nama_mdt TEXT,
-            jenjang TEXT,
-            tahun_pelajaran TEXT,
-            jumlah_lulus INTEGER,
-            file_lulusan TEXT,
-            tanggal_pengajuan TEXT,
-            status TEXT,
-            nomor_batch TEXT,
-            rekomendasi_file TEXT,
-            mdt_id INTEGER,
-            FOREIGN KEY (mdt_id) REFERENCES users (id)
-        )
-        """)
-        # nomor_ijazah (hasil penetapan per-santri)
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS nomor_ijazah (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pengajuan_id INTEGER,
-            nama_santri TEXT,
-            nis TEXT,
-            nomor_ijazah TEXT,
-            tahun TEXT,
-            jenjang TEXT,
-            FOREIGN KEY (pengajuan_id) REFERENCES pengajuan (id)
-        )
-        """)
-        # seed users (idempotent)
-        users = [
-            ("mdt", "123", "mdt", "MDT001", "Kota Cimahi"),
-            ("kemenag", "123", "kankemenag", None, "Kota Cimahi"),
-            ("kanwil", "123", "kanwil", None, "Jawa Barat"),
-            ("admin", "123", "admin", None, "Kanwil Jabar"),
-        ]
-        c.executemany(
-            "INSERT OR IGNORE INTO users (username, password, role, kode_mdt, wilayah) VALUES (?, ?, ?, ?, ?)",
-            users
-        )
-        conn.commit()
+        print("✅ Akun default dibuat: admin, kanwil, kankemenag")
+
+    conn.commit()
+    conn.close()
+    print("✅ Database siap digunakan.")
 
 def init_master_kabupaten():
     kabupaten_jabar = [
