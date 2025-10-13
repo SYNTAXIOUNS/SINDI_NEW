@@ -4,7 +4,6 @@ __pycache__/
 *.pyc
 
 # Database & Uploads
-sindi.db
 uploads/
 HASIL_MDT001_2024_Al-Jami'ah.xlsx
 tambahan/

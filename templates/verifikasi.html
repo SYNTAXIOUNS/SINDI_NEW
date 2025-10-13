@@ -1,31 +1,26 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<div class="container-fluid">
+<div class="container-fluid px-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold text-success">
-      <i class="bi bi-shield-check"></i> Verifikasi Pengajuan Nomor Ijazah MDT
-    </h3>
-    <span class="text-muted small">Pastikan data sudah valid sebelum dikirim ke Kanwil</span>
+    <h3 class="fw-bold text-success"><i class="bi bi-shield-check"></i> Verifikasi Pengajuan MDT</h3>
   </div>
 
   {% if pengajuan_list %}
   <div class="card shadow-sm border-0">
     <div class="card-header bg-success text-white">
-      <i class="bi bi-archive"></i> Daftar Pengajuan MDT
+      <i class="bi bi-clipboard-check"></i> Daftar Pengajuan Menunggu Verifikasi
     </div>
     <div class="card-body table-responsive">
       <table class="table table-hover align-middle">
         <thead class="table-success">
           <tr>
             <th>No</th>
-            <th>Batch</th>
             <th>Nama MDT</th>
-            <th>Kabupaten/Kota</th>
             <th>Jenjang</th>
             <th>Tahun</th>
             <th>Jumlah Lulus</th>
-            <th>Berkas</th>
+            <th>File</th>
             <th>Status</th>
             <th>Aksi</th>
           </tr>
@@ -34,37 +29,35 @@
           {% for p in pengajuan_list %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
             <td>{{ p[2] }}</td>
-            <td>{{ p[9] or '-' }}</td>
             <td>{{ p[3] }}</td>
             <td>{{ p[4] }}</td>
             <td>{{ p[5] }}</td>
             <td>
               {% if p[6] %}
-              <button class="btn btn-sm btn-outline-success" onclick="previewFile('{{ p[6] }}')">
-                <i class="bi bi-file-earmark-text"></i> Lihat
+              <button class="btn btn-sm btn-outline-success"
+                      onclick="previewFile('{{ p[6] | replace('\\', '/') }}')">
+                <i class="bi bi-eye"></i> Lihat
               </button>
+              {% else %}
+              <span class="text-muted">Tidak ada file</span>
               {% endif %}
             </td>
             <td>
-              {% if p[8] == 'Diverifikasi' %}
-              <span class="badge bg-success">Diverifikasi</span>
-              {% elif p[8] == 'Ditolak' %}
-              <span class="badge bg-danger">Ditolak</span>
-              {% else %}
-              <span class="badge bg-warning text-dark">Menunggu</span>
-              {% endif %}
+              <span class="badge {% if p[8] == 'Diverifikasi' %}bg-success{% elif p[8] == 'Ditolak' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                {{ p[8] or 'Menunggu' }}
+              </span>
             </td>
             <td>
-              {% if p[8] in ['Diverifikasi','Ditolak'] %}
-              <span class="text-muted small"><i class="bi bi-check-all"></i> Selesai</span>
-              {% else %}
-              <button class="btn btn-success btn-sm"
-                onclick="openVerifModal({{ p[0] }}, '{{ p[2] }}', '{{ p[3] }}', '{{ p[4] }}')">
-                <i class="bi bi-check2-circle"></i> Proses
-              </button>
-              {% endif %}
+              <form method="POST" class="d-flex gap-2">
+                <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
+                <button name="status" value="Diverifikasi" class="btn btn-success btn-sm">
+                  <i class="bi bi-check-circle"></i>
+                </button>
+                <button name="status" value="Ditolak" class="btn btn-danger btn-sm">
+                  <i class="bi bi-x-circle"></i>
+                </button>
+              </form>
             </td>
           </tr>
           {% endfor %}
@@ -75,9 +68,50 @@
   {% else %}
   <div class="text-center text-muted py-5">
     <i class="bi bi-inbox display-4"></i>
-    <p class="mt-3">Belum ada pengajuan menunggu verifikasi.</p>
+    <p class="mt-3">Belum ada pengajuan yang perlu diverifikasi.</p>
   </div>
   {% endif %}
 </div>
+
+<!-- Modal Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i> Pratinjau Dokumen</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" style="height: 80vh;">
+        <iframe id="previewFrame" src="" style="width:100%;height:100%;border:none;"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function previewFile(filePath) {
+  const filename = filePath.split('/').pop();
+  const ext = filename.split('.').pop().toLowerCase();
+  const url = `/uploads/${filename}`;
+
+  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+  const iframe = document.getElementById('previewFrame');
+
+  if (["pdf"].includes(ext)) {
+    iframe.src = url;
+  } else if (["xls", "xlsx", "csv"].includes(ext)) {
+    iframe.src = `https://view.officeapps.live.com/op/embed.aspx?src=${window.location.origin + url}`;
+  } else {
+    iframe.srcdoc = `
+      <div class='p-5 text-center text-muted'>
+        Format file <b>.${ext}</b> tidak bisa dipratinjau.<br><br>
+        <a href='${url}' download class='btn btn-success'>
+          <i class="bi bi-download"></i> Unduh File Asli
+        </a>
+      </div>`;
+  }
+  modal.show();
+}
+</script>
 
 {% endblock %}

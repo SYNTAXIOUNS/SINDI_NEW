@@ -5,7 +5,8 @@ import datetime
 import sqlite3
 import os
 
-DB_NAME = "sindi.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_NAME = os.path.join(BASE_DIR, "../instance/sindi.db")
 
 # ======================
 # DATABASE HELPER
@@ -18,31 +19,29 @@ def _conn():
 # MDT: PENGAJUAN BATCH
 # ======================
 def create_pengajuan_batch(mdt_user, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, file_lulusan_path):
-    nomor_batch = f"BATCH-{mdt_user['kode_mdt']}-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}"
+    nomor_batch = f"BATCH_{mdt_user['kode_mdt']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     with _conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO pengajuan (nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, file_lulusan,
-                                   tanggal_pengajuan, status, nomor_batch, mdt_id)
+                                   status, nomor_batch, mdt_id, kabupaten)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            nama_mdt, jenjang, tahun_pelajaran, int(jumlah_lulus),
-            file_lulusan_path, datetime.date.today().isoformat(),
-            "Diajukan", nomor_batch, mdt_user["id"]
+            nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, file_lulusan_path,
+            "Diajukan", nomor_batch, mdt_user["id"], mdt_user.get("wilayah", "")
         ))
         conn.commit()
-        return nomor_batch
+    return nomor_batch
 
 
 def list_pengajuan_batch_by_mdt(mdt_id):
     with _conn() as conn:
         c = conn.cursor()
         c.execute("""
-            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
-                   file_lulusan, tanggal_pengajuan, status
+            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
+                   jumlah_lulus, file_lulusan, status, kabupaten
             FROM pengajuan
-            WHERE mdt_id=?
-            ORDER BY id DESC
+            WHERE mdt_id=? ORDER BY id DESC
         """, (mdt_id,))
         return c.fetchall()
 
@@ -50,38 +49,32 @@ def list_pengajuan_batch_by_mdt(mdt_id):
 # KANKEMENAG: VERIFIKASI
 # ======================
 def list_pengajuan_for_kemenag():
-    """Menampilkan semua pengajuan yang belum diverifikasi"""
     with _conn() as conn:
         c = conn.cursor()
         c.execute("""
-            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
-                   jumlah_lulus, tanggal_pengajuan, status, file_lulusan, rekomendasi_file
+            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
+                   file_lulusan, status, kabupaten, alasan, tanggal_verifikasi, verifikator
             FROM pengajuan
-            WHERE status='Diajukan'
-            ORDER BY tanggal_pengajuan DESC
+            WHERE status IN ('Diajukan', 'Ditolak', 'Diverifikasi')
+            ORDER BY id DESC
         """)
         return c.fetchall()
 
-import sqlite3
-
-DB_NAME = "sindi.db"
-
-def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None):
-    with sqlite3.connect(DB_NAME) as conn:
+def update_status_pengajuan(pengajuan_id, status, alasan=None):
+    with _conn() as conn:
         c = conn.cursor()
         c.execute("""
             UPDATE pengajuan
-            SET status = ?, alasan = ?, tanggal_verifikasi = ?, verifikator = ?
-            WHERE id = ?
+            SET status=?, alasan=?, tanggal_verifikasi=?, verifikator=?
+            WHERE id=?
         """, (
             status,
             alasan,
             datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            verifikator,
+            "Kankemenag",
             pengajuan_id
         ))
         conn.commit()
-        return True
 
 def update_status_to_diverifikasi(pengajuan_id, rekomendasi_path):
     """Update status pengajuan jadi Diverifikasi dan simpan file rekomendasi"""
@@ -105,18 +98,20 @@ def update_status_to_diverifikasi(pengajuan_id, rekomendasi_path):
 # KANWIL: PENETAPAN NOMOR IJAZAH
 # ======================
 def list_pengajuan_for_kanwil():
-    """Daftar pengajuan yang siap ditetapkan (sudah diverifikasi)"""
-    with sqlite3.connect(DB_NAME) as conn:
+    import os
+    print("[DEBUG] Mengambil data untuk Kanwil dari:", os.path.abspath(DB_NAME))
+    with _conn() as conn:
         c = conn.cursor()
         c.execute("""
-            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
-                   jumlah_lulus, file_lulusan, tanggal_pengajuan, status,
-                   tanggal_verifikasi, verifikator, alasan
+            SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
+                   file_lulusan, status, kabupaten, alasan, tanggal_verifikasi, verifikator
             FROM pengajuan
-            WHERE status IN ('Diverifikasi', 'Ditolak')
-            ORDER BY tanggal_pengajuan DESC
+            WHERE status = 'Diverifikasi' OR status = 'Disetujui'
+            ORDER BY tanggal_verifikasi DESC
         """)
-        return c.fetchall()
+        data = c.fetchall()
+        print("[DEBUG] Data hasil query Kanwil:", data)
+        return data
 
 def update_status_pengajuan(pengajuan_id, status, alasan=None):
     with _conn() as conn:
@@ -372,8 +367,10 @@ def get_nama_mdt_by_kode(kode_mdt):
         return row[0] if row else kode_mdt
 
 def list_kabupaten():
-    import sqlite3
-    from app import DB_NAME
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("SELECT nama_kabupaten FROM master_kabupaten ORDER BY nama_kabupaten ASC")
+        return [r[0] for r in c.fetchall()]
 
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()

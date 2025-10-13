@@ -494,6 +494,7 @@ def verifikasi_kemenag():
     pengajuan_list = list_pengajuan_for_kemenag()
     return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
 
+
 # ==============================
 #  KANWIL: Penetapan + Export (Excel/PDF)
 # ==============================
