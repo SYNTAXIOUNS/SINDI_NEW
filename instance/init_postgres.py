@@ -5,7 +5,7 @@ import os
 import psycopg2
 from urllib.parse import urlparse
 
-DATABASE_URL = os.getenv("postgresql://sindi_jepf_user:tkWIZQfHSvi8p3DSjC9vDi9vo1OC9sVc@dpg-d3lt3cogjchc73cmsuo0-a.singapore-postgres.render.com/sindi_jepf")
+DATABASE_URL = os.getenv("postgresql://sindi_jepf_user:tkWIZQfHSvi8p3DSjC9vDi9vo1OC9sVc@dpg-d3lt3cogjchc73cmsuo0-a/sindi_jepf")
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL belum diset di Render!")
 
