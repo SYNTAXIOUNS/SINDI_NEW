@@ -7,16 +7,17 @@ from werkzeug.utils import secure_filename
 from services.auth_service import login_user, logout_user, current_user, require_role
 from services.admin_service import list_users, create_user
 from services.mdt_service import (
-    create_pengajuan_batch,
-    list_pengajuan_batch_by_mdt,
-    list_pengajuan_for_kemenag,
-    update_status_pengajuan,
-    list_pengajuan_for_kanwil,
-    generate_nomor_ijazah_batch,
-    list_hasil_penetapan,
-    list_kabupaten
+    _conn,  # helper koneksi
+    # MDT (batch pengajuan)
+    create_pengajuan_batch, list_pengajuan_batch_by_mdt,
+    # Kankemenag (verifikasi)
+    list_pengajuan_for_kemenag, update_status_to_diverifikasi,
+    # Kanwil (penetapan + export)
+    list_pengajuan_for_kanwil, generate_nomor_ijazah_batch,
+    export_nomor_ijazah_excel, export_nomor_ijazah_pdf,
+    # MDT (hasil)
+    get_nomor_ijazah_by_pengajuan,
 )
-
 from flask import send_file, jsonify
 from flask import send_from_directory, abort
 from flask import render_template
@@ -483,8 +484,7 @@ def verifikasi_kemenag():
         status = request.form.get("status")
         alasan = request.form.get("alasan", "").strip() or None
 
-        # 💡 masukkan nama verifikator
-        update_status_pengajuan(pengajuan_id, status, alasan, user["username"])
+        update_status_pengajuan(pengajuan_id, status, alasan)
         flash(f"✅ Pengajuan berhasil diperbarui sebagai {status}.", "success")
         return redirect(url_for("verifikasi_kemenag"))
 
@@ -499,23 +499,22 @@ def verifikasi_kemenag():
 @require_role(["kanwil", "admin"])
 def penetapan_kanwil():
     user = current_user()
-    kab_filter = request.args.get("kabupaten", "").strip()
-    jenjang_filter = request.args.get("jenjang", "").strip()
+    kab_filter = request.args.get("kabupaten")
+    jenjang_filter = request.args.get("jenjang")
 
     query = """
         SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
                file_lulusan, status, kabupaten, alasan, verifikator, tanggal_verifikasi
         FROM pengajuan
-        WHERE 1=1
-          AND status IN ('Diverifikasi', 'Disetujui')
+        WHERE status IN ('Diverifikasi', 'Disetujui')
     """
     params = []
 
     if kab_filter:
-        query += " AND kabupaten = ?"
+        query += " AND kabupaten=?"
         params.append(kab_filter)
     if jenjang_filter:
-        query += " AND jenjang = ?"
+        query += " AND jenjang=?"
         params.append(jenjang_filter)
 
     query += " ORDER BY id DESC"
@@ -524,20 +523,14 @@ def penetapan_kanwil():
         c = conn.cursor()
         c.execute(query, params)
         pengajuan_list = c.fetchall()
-
         c.execute("SELECT id, nama_kabupaten FROM master_kabupaten ORDER BY nama_kabupaten ASC")
         daftar_kabupaten = c.fetchall()
 
-    print(f"[DEBUG] Query: {query}")
-    print(f"[DEBUG] Params: {params}")
     print(f"[DEBUG] Jumlah data tampil di Kanwil: {len(pengajuan_list)}")
-
-    return render_template(
-        "penetapan.html",
-        user=user,
-        pengajuan_list=pengajuan_list,
-        daftar_kabupaten=daftar_kabupaten,
-    )
+    return render_template("penetapan.html",
+                           user=user,
+                           pengajuan_list=pengajuan_list,
+                           daftar_kabupaten=daftar_kabupaten)
 
 @app.route("/hasil/download/<path:filename>")
 def download_hasil(filename):
