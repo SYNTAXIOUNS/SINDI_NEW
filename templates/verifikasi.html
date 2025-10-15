@@ -49,15 +49,22 @@
               </span>
             </td>
             <td>
-              <form method="POST" class="d-flex gap-2">
+              <form method="POST" action="{{ url_for('verifikasi_kemenag') }}">
                 <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
-                <button name="status" value="Diverifikasi" class="btn btn-success btn-sm">
-                  <i class="bi bi-check-circle"></i>
-                </button>
-                <button name="status" value="Ditolak" class="btn btn-danger btn-sm">
-                  <i class="bi bi-x-circle"></i>
+                <input type="hidden" name="status" value="Diverifikasi">
+                <button class="btn btn-success btn-sm" type="submit">
+                  <i class="bi bi-check-circle"></i> Terima
                 </button>
               </form>
+
+              <form method="POST" action="{{ url_for('verifikasi_kemenag') }}">
+                <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
+                <input type="hidden" name="status" value="Ditolak">
+                <button class="btn btn-danger btn-sm" type="submit">
+                  <i class="bi bi-x-circle"></i> Tolak
+                </button>
+              </form>
+
             </td>
           </tr>
           {% endfor %}

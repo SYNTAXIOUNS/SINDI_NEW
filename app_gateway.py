@@ -498,24 +498,30 @@ def verifikasi_kemenag():
 @app.route("/penetapan", methods=["GET", "POST"])
 @require_role(["kanwil", "admin"])
 def penetapan_kanwil():
-    user = current_user()
-    kab_filter = request.args.get("kabupaten", "").strip()
-    jenjang_filter = request.args.get("jenjang", "").strip()
+    from services.mdt_service import list_pengajuan_for_kanwil, tetapkan_pengajuan, list_kabupaten
+
+    if request.method == "POST":
+        pengajuan_id = request.form.get("pengajuan_id")
+        tetapkan_pengajuan(pengajuan_id)
+        flash("✅ Nomor Ijazah berhasil ditetapkan.", "success")
+        return redirect(url_for("penetapan_kanwil"))
+
+    kab_filter = request.args.get("kabupaten")
+    jenjang_filter = request.args.get("jenjang")
 
     query = """
         SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
                file_lulusan, status, kabupaten, alasan, verifikator, tanggal_verifikasi
         FROM pengajuan
-        WHERE 1=1
-          AND status IN ('Diverifikasi', 'Disetujui')
+        WHERE status = 'Diverifikasi'
     """
     params = []
 
     if kab_filter:
-        query += " AND kabupaten = ?"
+        query += " AND kabupaten=?"
         params.append(kab_filter)
     if jenjang_filter:
-        query += " AND jenjang = ?"
+        query += " AND jenjang=?"
         params.append(jenjang_filter)
 
     query += " ORDER BY id DESC"
@@ -525,19 +531,11 @@ def penetapan_kanwil():
         c.execute(query, params)
         pengajuan_list = c.fetchall()
 
-        c.execute("SELECT id, nama_kabupaten FROM master_kabupaten ORDER BY nama_kabupaten ASC")
-        daftar_kabupaten = c.fetchall()
-
-    print(f"[DEBUG] Query: {query}")
-    print(f"[DEBUG] Params: {params}")
-    print(f"[DEBUG] Jumlah data tampil di Kanwil: {len(pengajuan_list)}")
-
-    return render_template(
-        "penetapan.html",
-        user=user,
-        pengajuan_list=pengajuan_list,
-        daftar_kabupaten=daftar_kabupaten,
-    )
+    daftar_kabupaten = [(i+1, k) for i, k in enumerate(list_kabupaten())]
+    return render_template("penetapan.html",
+                           user=current_user(),
+                           pengajuan_list=pengajuan_list,
+                           daftar_kabupaten=daftar_kabupaten)
 
 @app.route("/hasil/download/<path:filename>")
 def download_hasil(filename):

@@ -104,19 +104,41 @@ def list_pengajuan_for_kemenag():
 
 
 def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None):
-    import datetime, sqlite3
+    """Dipanggil dari Kankemenag untuk ubah status pengajuan."""
+    import datetime
     from app_gateway import DB_NAME
-
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Normalisasi status agar tidak salah kapital
+    status_clean = status.strip().lower()
+
+    if status_clean in ["diverifikasi", "verifikasi", "setuju", "ya", "acc", "approve"]:
+        status_final = "Diverifikasi"
+    elif status_clean in ["tolak", "ditolak", "tidak", "no"]:
+        status_final = "Ditolak"
+    else:
+        status_final = "Menunggu"
 
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
+        # Pastikan kolom sudah ada
+        for col, tipe in [
+            ("alasan", "TEXT"),
+            ("tanggal_verifikasi", "TEXT"),
+            ("verifikator", "TEXT"),
+        ]:
+            try:
+                c.execute(f"ALTER TABLE pengajuan ADD COLUMN {col} {tipe}")
+            except sqlite3.OperationalError:
+                pass
+
         c.execute("""
             UPDATE pengajuan
-            SET status = ?, alasan = ?, verifikator = ?, tanggal_verifikasi = ?
-            WHERE id = ?
-        """, (status, alasan, verifikator, now, pengajuan_id))
+            SET status=?, alasan=?, verifikator=?, tanggal_verifikasi=?
+            WHERE id=?
+        """, (status_final, alasan, verifikator, now, pengajuan_id))
         conn.commit()
+
 
 # ======================
 # KANWIL: PENETAPAN NOMOR IJAZAH
@@ -126,9 +148,9 @@ def list_pengajuan_for_kanwil():
         c = conn.cursor()
         c.execute("""
             SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
-                   file_lulusan, status, kabupaten
+                   file_lulusan, status, kabupaten, alasan, verifikator, tanggal_verifikasi
             FROM pengajuan
-            WHERE status='Diverifikasi'
+            WHERE status = 'Diverifikasi'
             ORDER BY id DESC
         """)
         return c.fetchall()
@@ -232,16 +254,23 @@ def list_kabupaten():
         return [r[0] for r in c.fetchall()]
 
 def tetapkan_pengajuan(pengajuan_id):
-    import sqlite3, datetime
+    """Dijalankan oleh Kanwil untuk menetapkan pengajuan."""
+    import datetime
     from app_gateway import DB_NAME
-
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
+
+        # Tambahkan kolom tanggal_penetapan jika belum ada
+        try:
+            c.execute("ALTER TABLE pengajuan ADD COLUMN tanggal_penetapan TEXT")
+        except sqlite3.OperationalError:
+            pass
+
         c.execute("""
             UPDATE pengajuan
-            SET status = 'Ditetapkan', tanggal_penetapan = ?
-            WHERE id = ?
+            SET status='Ditetapkan', tanggal_penetapan=?
+            WHERE id=?
         """, (now, pengajuan_id))
         conn.commit()

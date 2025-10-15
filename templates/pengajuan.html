@@ -96,19 +96,22 @@
           <tr>
             <td>{{ loop.index }}</td>
             <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
-            <td>{{ p[9] or '-' }}</td>
-            <td>{{ p[3] }}</td>
-            <td>{{ p[4] }}</td>
-            <td>{{ p[5] }}</td>
+            <td>{{ p[8] or '-' }}</td>  <!-- kabupaten -->
+            <td>{{ p[3] }}</td>         <!-- jenjang -->
+            <td>{{ p[4] }}</td>         <!-- tahun -->
+            <td>{{ p[5] }}</td>         <!-- jumlah -->
             <td>
-              {% if p[8] == 'Diverifikasi' %}
+              {% if p[7] == 'Diverifikasi' %}
               <span class="badge bg-success">Diverifikasi</span>
-              {% elif p[8] == 'Ditetapkan' %}
+              {% elif p[7] == 'Ditetapkan' %}
               <span class="badge bg-primary">Ditetapkan</span>
+              {% elif p[7] == 'Ditolak' %}
+              <span class="badge bg-danger">Ditolak</span>
               {% else %}
-              <span class="badge bg-warning text-dark">{{ p[8] or 'Menunggu' }}</span>
+              <span class="badge bg-warning text-dark">{{ p[7] or 'Menunggu' }}</span>
               {% endif %}
             </td>
+
           </tr>
           {% endfor %}
         </tbody>
