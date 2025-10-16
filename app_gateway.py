@@ -483,9 +483,16 @@ def verifikasi_kemenag():
         status = request.form.get("status")
         alasan = request.form.get("alasan", "").strip() or None
 
-        # 💡 masukkan nama verifikator
-        update_status_pengajuan(pengajuan_id, status, alasan, user["username"])
-        flash(f"✅ Pengajuan berhasil diperbarui sebagai {status}.", "success")
+        # Normalisasi status agar konsisten
+        if status.lower() in ["setuju", "ya", "verifikasi", "diverifikasi", "approve", "acc"]:
+            status_final = "Diverifikasi"
+        elif status.lower() in ["tolak", "tidak", "no", "ditolak"]:
+            status_final = "Ditolak"
+        else:
+            status_final = "Menunggu"
+
+        update_status_pengajuan(pengajuan_id, status_final, alasan, verifikator=user["username"])
+        flash(f"✅ Pengajuan berhasil diperbarui sebagai {status_final}.", "success")
         return redirect(url_for("verifikasi_kemenag"))
 
     pengajuan_list = list_pengajuan_for_kemenag()
