@@ -5,6 +5,25 @@ from fpdf import FPDF
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_NAME = os.path.join(BASE_DIR, "sindi.db")
 
+
+# ======================================
+# HYBRID DB: PostgreSQL (Render) / SQLite (Local)
+# ======================================
+DATABASE_URL = os.getenv("DATABASE_URL")
+IS_POSTGRES = DATABASE_URL is not None  # ✅ Tambahkan baris ini
+DB_NAME = "sindi.db"
+
+def _conn():
+    if IS_POSTGRES:
+        result = urlparse(DATABASE_URL)
+        return psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+    return sqlite3.connect(DB_NAME)
 # ======================
 # KONEKSI DATABASE
 # ======================
@@ -105,10 +124,9 @@ def list_pengajuan_for_kemenag():
 # 🔸 Fungsi update status verifikasi dari Kemenag
 # =========================================================
 def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None):
-    """Dipanggil dari Kankemenag untuk ubah status pengajuan."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Normalisasi status
+    # Normalisasi status dengan aman
     status_clean = status.strip().lower()
     if status_clean in ["diverifikasi", "verifikasi", "setuju", "ya", "acc", "approve"]:
         status_final = "Diverifikasi"
@@ -120,7 +138,7 @@ def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None)
     with _conn() as conn:
         c = conn.cursor()
 
-        # Tambahkan kolom bila belum ada
+        # Pastikan kolom tambahan ada
         for col, tipe in [
             ("alasan", "TEXT"),
             ("verifikator", "TEXT"),
@@ -131,13 +149,13 @@ def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None)
             except sqlite3.OperationalError:
                 pass
 
+        # Simpan perubahan
         c.execute("""
             UPDATE pengajuan
             SET status=?, alasan=?, verifikator=?, tanggal_verifikasi=?
             WHERE id=?
         """, (status_final, alasan, verifikator, now, pengajuan_id))
         conn.commit()
-
 
 # ======================
 # KANWIL: PENETAPAN NOMOR IJAZAH
@@ -159,22 +177,22 @@ def list_pengajuan_for_kanwil():
 # =========================================================
 # 🔸 Fungsi penetapan dari Kanwil
 # =========================================================
+# ==========================================
+# 🔹 Penetapan oleh Kanwil
+# ==========================================
 def tetapkan_pengajuan(pengajuan_id):
-    """Dijalankan oleh Kanwil untuk menetapkan pengajuan sebagai ijazah resmi."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     with _conn() as conn:
         c = conn.cursor()
-        try:
-            c.execute("ALTER TABLE pengajuan ADD COLUMN tanggal_penetapan TEXT")
-        except sqlite3.OperationalError:
-            pass
-
         c.execute("""
             UPDATE pengajuan
-            SET status='Ditetapkan', tanggal_penetapan=?
+            SET status=%s, tanggal_penetapan=%s
+            WHERE id=%s
+        """ if IS_POSTGRES else """
+            UPDATE pengajuan
+            SET status=?, tanggal_penetapan=?
             WHERE id=?
-        """, (now, pengajuan_id))
+        """, ("Ditetapkan", now, pengajuan_id))
         conn.commit()
 
 def generate_nomor_ijazah_batch(pengajuan_id):
@@ -273,3 +291,44 @@ def list_kabupaten():
         c = conn.cursor()
         c.execute("SELECT nama_kabupaten FROM master_kabupaten ORDER BY nama_kabupaten ASC")
         return [r[0] for r in c.fetchall()]
+
+# ==========================================
+# 🔹 Hasil Penetapan (untuk MDT & Kanwil)
+# ==========================================
+def list_hasil_penetapan_by_role(role):
+    with _conn() as conn:
+        c = conn.cursor()
+        if role == "mdt":
+            c.execute("""
+                SELECT nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
+                       jumlah_lulus, kabupaten, tanggal_penetapan
+                FROM pengajuan
+                WHERE status='Ditetapkan'
+                ORDER BY id DESC
+            """)
+        else:  # Kanwil
+            c.execute("""
+                SELECT nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
+                       jumlah_lulus, kabupaten, tanggal_penetapan, verifikator
+                FROM pengajuan
+                WHERE status='Ditetapkan'
+                ORDER BY id DESC
+            """)
+        return c.fetchall()
+
+
+# ==========================================
+# 🔹 Riwayat Verifikasi untuk Kemenag
+# ==========================================
+def list_riwayat_verifikasi_kemenag():
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
+                   jumlah_lulus, status, kabupaten, alasan, verifikator,
+                   tanggal_verifikasi
+            FROM pengajuan
+            WHERE status IN ('Diverifikasi', 'Ditolak')
+            ORDER BY tanggal_verifikasi DESC
+        """)
+        return c.fetchall()

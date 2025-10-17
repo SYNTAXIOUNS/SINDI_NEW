@@ -75,7 +75,7 @@ users = [
     ("admin", "123", "admin", None, "Kanwil Jawa Barat"),
     ("kanwil", "123", "kanwil", None, "Kanwil Jawa Barat"),
     ("kemenag", "123", "kankemenag", None, "Kabupaten Tasikmalaya"),
-    ("mdt", "123", "mdt", "MDT001", "Kabupaten Tasikmalaya"),
+    ("mdt", "123", "mdt", "MDT", "Kabupaten Tasikmalaya"),
 ]
 for u in users:
     c.execute("INSERT INTO users (username, password, role, kode_mdt, wilayah) VALUES (?, ?, ?, ?, ?)", u)

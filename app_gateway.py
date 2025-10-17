@@ -498,6 +498,13 @@ def verifikasi_kemenag():
     pengajuan_list = list_pengajuan_for_kemenag()
     return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
 
+@app.route("/riwayat_verifikasi")
+@require_role("kankemenag")
+def riwayat_verifikasi():
+    from services.mdt_service import list_riwayat_verifikasi_kemenag
+    user = current_user()
+    riwayat = list_riwayat_verifikasi_kemenag()
+    return render_template("riwayat_verifikasi.html", user=user, riwayat=riwayat)
 
 # ==============================
 #  KANWIL: Penetapan + Export (Excel/PDF)
@@ -847,6 +854,14 @@ def reset_password(user_id):
 
     flash(f"🔑 Password user '{username}' telah direset ke default (123).", "info")
     return redirect(url_for("admin_users"))
+
+@app.route("/hasil")
+@require_role(["mdt", "kanwil"])
+def hasil_view():
+    from services.mdt_service import list_hasil_penetapan_by_role
+    user = current_user()
+    hasil = list_hasil_penetapan_by_role(user["role"])
+    return render_template("hasil.html", user=user, hasil=hasil)
 
 # ==============================
 #  RUN

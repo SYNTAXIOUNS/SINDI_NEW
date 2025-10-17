@@ -58,38 +58,40 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for p in pengajuan_list %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
-                        <td>{{ p[2] }}</td>
-                        <td>{{ p[3] }}</td>
-                        <td>{{ p[4] }}</td>
-                        <td>{{ p[5] }}</td>
-                        <td>
-                            {% if p[8] == 'Diverifikasi' %}
-                                <span class="badge bg-success">Diverifikasi</span>
-                            {% else %}
-                                <span class="badge bg-danger">Ditolak</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ p[10] or '-' }}</td>
-                        <td>{{ p[9] or '-' }}</td>
-                        <td>{{ p[11] or '-' }}</td>
-                        <td>
-                            {% if p[8] == 'Diverifikasi' %}
-                            <form action="{{ url_for('penetapan_kanwil') }}" method="POST" style="display:inline;">
-                                <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
-                                <button type="submit" class="btn btn-sm btn-primary">
-                                    <i class="bi bi-award-fill"></i> Tetapkan Nomor
-                                </button>
-                            </form>
-                            {% else %}
-                            <span class="text-muted small">Tidak dapat ditetapkan</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
+                {% for p in pengajuan_list %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><span class="badge bg-secondary">{{ p[1] }}</span></td>
+                    <td>{{ p[2] }}</td> <!-- Nama MDT -->
+                    <td>{{ p[3] }}</td> <!-- Jenjang -->
+                    <td>{{ p[4] }}</td> <!-- Tahun -->
+                    <td>{{ p[5] }}</td> <!-- Jumlah Lulus -->
+                    <td>
+                    {% if p[7] == 'Diverifikasi' %}
+                        <span class="badge bg-success">Diverifikasi</span>
+                    {% elif p[7] == 'Ditolak' %}
+                        <span class="badge bg-danger">Ditolak</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">{{ p[7] or 'Menunggu' }}</span>
+                    {% endif %}
+                    </td>
+                    <td>{{ p[10] or '-' }}</td> <!-- Verifikator -->
+                    <td>{{ p[11] or '-' }}</td> <!-- Tanggal Verifikasi -->
+                    <td>{{ p[9] or '-' }}</td> <!-- Alasan jika ditolak -->
+                    <td>
+                    {% if p[7] == 'Diverifikasi' %}
+                        <form method="POST">
+                        <input type="hidden" name="pengajuan_id" value="{{ p[0] }}">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="bi bi-check-circle"></i> Tetapkan
+                        </button>
+                        </form>
+                    {% else %}
+                        <span class="text-muted">Tidak dapat ditetapkan</span>
+                    {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>

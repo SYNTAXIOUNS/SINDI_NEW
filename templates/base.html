@@ -101,6 +101,15 @@
         #nprogress .peg {
             box-shadow: 0 0 10px #006A4E, 0 0 5px #006A4E;
         }
+        .nav-link.active {
+          background-color: #198754;
+          color: white !important;
+          border-radius: 8px;
+          font-weight: 600;
+        }
+        .nav-link.active i {
+          color: white !important;
+        }
     </style>
 </head>
 <body>
@@ -140,9 +149,19 @@
 
           <!-- === Kankemenag === -->
           {% if user.role == 'kankemenag' %}
-              <a class="nav-link {% if request.path == '/verifikasi' %}active{% endif %}" href="{{ url_for('verifikasi_kemenag') }}">
-                  <i class="bi bi-shield-check"></i> Verifikasi
+            <li class="nav-item">
+              <a class="nav-link {% if request.path.startswith('/verifikasi') %}active{% endif %}" 
+                href="{{ url_for('verifikasi_kemenag') }}">
+                <i class="bi bi-shield-check"></i> Verifikasi Pengajuan
               </a>
+            </li>
+
+            <li class="nav-item">
+              <a class="nav-link {% if request.path.startswith('/riwayat_verifikasi') %}active{% endif %}" 
+                href="{{ url_for('riwayat_verifikasi') }}">
+                <i class="bi bi-clock-history"></i> Riwayat Verifikasi
+              </a>
+            </li>
           {% endif %}
 
           <!-- === Admin Khusus Kanwil === -->
