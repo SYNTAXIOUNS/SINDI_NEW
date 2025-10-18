@@ -2,14 +2,14 @@
 {% block content %}
 
 <div class="container-fluid">
-  <!-- 🔹 Header -->
+  <!-- Header -->
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h3 class="fw-bold text-success mb-0">
       <i class="bi bi-file-earmark-bar-graph"></i> Hasil Penetapan Semua MDT
     </h3>
   </div>
 
-  <!-- 🔹 Filter Section -->
+  <!-- Filter Section -->
   <form method="GET" class="row g-3 align-items-end mb-4">
     <div class="col-md-4">
       <label for="filter_kabupaten" class="form-label fw-semibold text-success">Kabupaten/Kota</label>
@@ -20,6 +20,7 @@
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-4">
       <label for="filter_jenjang" class="form-label fw-semibold text-success">Jenjang MDT</label>
       <select id="filter_jenjang" name="jenjang" class="form-select border-success shadow-sm">
@@ -29,6 +30,7 @@
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-4 d-flex gap-2">
       <button type="submit" class="btn btn-success flex-grow-1">
         <i class="bi bi-filter"></i> Terapkan Filter
@@ -39,38 +41,14 @@
     </div>
   </form>
 
-  <!-- 🔹 Data Table -->
+  <!-- Data Table -->
   {% if hasil_list %}
   <div class="card shadow-sm border-0">
     <div class="card-header bg-success text-white">
       <i class="bi bi-archive"></i> Daftar File Penetapan Ijazah
     </div>
-    <div class="card-body table-responsive">
-      <form method="GET" class="row g-2 align-items-end mb-3">
-  <div class="col-md-5">
-    <label class="form-label fw-semibold">Kabupaten/Kota</label>
-    <select class="form-select" name="kabupaten">
-      <option value="">Semua Kabupaten</option>
-      {% for kab in daftar_kabupaten %}
-        <option value="{{ kab[1] }}" {% if request.args.get('kabupaten') == kab[1] %}selected{% endif %}>{{ kab[1] }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-5">
-    <label class="form-label fw-semibold">Jenjang</label>
-    <select class="form-select" name="jenjang">
-      <option value="">Semua Jenjang</option>
-      <option value="Ula">Ula</option>
-      <option value="Wustha">Wustha</option>
-      <option value="Ulya">Ulya</option>
-      <option value="Al-Jami’ah">Al-Jami’ah</option>
-    </select>
-  </div>
-  <div class="col-md-2">
-    <button type="submit" class="btn btn-success w-100"><i class="bi bi-funnel"></i> Filter</button>
-  </div>
-</form>
 
+    <div class="card-body table-responsive">
       <table class="table table-hover align-middle">
         <thead class="table-success">
           <tr>
@@ -89,18 +67,16 @@
           <tr>
             <td>{{ loop.index }}</td>
             <td>{{ h.nama_mdt }}</td>
-            <td>{{ h.kabupaten }}</td>
+            <td>{{ h.kabupaten or '-' }}</td>
             <td>{{ h.jenjang }}</td>
             <td>{{ h.tahun }}</td>
             <td>{{ h.jumlah }}</td>
             <td><span class="badge bg-secondary">{{ h.batch }}</span></td>
             <td>
               {% if h.file_path %}
-              <button class="btn btn-sm btn-outline-success"
-                      onclick="previewExcelFromRow('{{ h.file_path }}')">
+              <button class="btn btn-sm btn-outline-success" onclick="previewExcelFromRow('{{ h.file_path }}')">
                 <i class="bi bi-eye"></i> Lihat
               </button>
-
               <a href="/{{ h.file_path }}" download class="btn btn-success btn-sm">
                 <i class="bi bi-download"></i> Unduh
               </a>
@@ -123,7 +99,7 @@
   {% endif %}
 </div>
 
-<!-- 🔹 Modal Pratinjau Excel -->
+<!-- Modal Preview Excel -->
 <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">

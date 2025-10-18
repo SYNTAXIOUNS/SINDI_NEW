@@ -181,19 +181,25 @@ def list_pengajuan_for_kanwil():
 # 🔹 Penetapan oleh Kanwil
 # ==========================================
 def tetapkan_pengajuan(pengajuan_id):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with _conn() as conn:
-        c = conn.cursor()
-        c.execute("""
-            UPDATE pengajuan
-            SET status=%s, tanggal_penetapan=%s
-            WHERE id=%s
-        """ if IS_POSTGRES else """
-            UPDATE pengajuan
-            SET status=?, tanggal_penetapan=?
-            WHERE id=?
-        """, ("Ditetapkan", now, pengajuan_id))
-        conn.commit()
+    conn = _conn()
+    c = conn.cursor()
+
+    # Update status pengajuan
+    if IS_POSTGRES:
+        c.execute("UPDATE pengajuan SET status = %s WHERE id = %s", ('Ditetapkan', pengajuan_id))
+    else:
+        c.execute("UPDATE pengajuan SET status = ? WHERE id = ?", ('Ditetapkan', pengajuan_id))
+
+    # Simulasi generate nomor ijazah
+    if IS_POSTGRES:
+        c.execute("INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang) VALUES (%s, %s, %s, %s, %s, %s)", 
+                  (pengajuan_id, 'Dummy Santri', '0001', f'IJZ-{pengajuan_id}-2025', '2025', 'Wustha'))
+    else:
+        c.execute("INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang) VALUES (?, ?, ?, ?, ?, ?)", 
+                  (pengajuan_id, 'Dummy Santri', '0001', f'IJZ-{pengajuan_id}-2025', '2025', 'Wustha'))
+
+    conn.commit()
+    conn.close()
 
 def generate_nomor_ijazah_batch(pengajuan_id):
     """Generate nomor ijazah dari file Excel"""
@@ -254,36 +260,47 @@ def get_nomor_ijazah_by_pengajuan(pengajuan_id):
         """, (pengajuan_id,))
         return c.fetchall()
 
+def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
+    conn = _conn()
+    c = conn.cursor()
 
-def list_hasil_penetapan(kode_mdt=None):
-    with _conn() as conn:
-        c = conn.cursor()
-        if kode_mdt:
-            c.execute("""
-                SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, nomor_batch, kabupaten
-                FROM pengajuan WHERE status='Ditetapkan' AND nama_mdt=? ORDER BY id DESC
-            """, (kode_mdt,))
-        else:
-            c.execute("""
-                SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, nomor_batch, kabupaten
-                FROM pengajuan WHERE status='Ditetapkan' ORDER BY id DESC
-            """)
-        data = c.fetchall()
-        hasil = []
-        for row in data:
-            fpath = f"hasil_excel/HASIL_{row[1]}_{row[3]}_{row[2]}.xlsx"
-            if os.path.exists(fpath):
-                hasil.append({
-                    "id": row[0],
-                    "nama_mdt": row[1],
-                    "jenjang": row[2],
-                    "tahun": row[3],
-                    "jumlah": row[4],
-                    "batch": row[5],
-                    "kabupaten": row[6],
-                    "file_path": fpath
-                })
-        return hasil
+    query = """
+        SELECT 
+            p.id, p.nama_mdt, p.jenjang, p.tahun_pelajaran, 
+            p.jumlah_lulus, p.kabupaten, p.nomor_batch, p.file_lulusan
+        FROM pengajuan p
+        WHERE p.status = 'Ditetapkan'
+    """
+    params = []
+
+    if kode_mdt:
+        query += " AND p.nama_mdt = ?"
+        params.append(kode_mdt)
+    if kabupaten:
+        query += " AND p.kabupaten = ?"
+        params.append(kabupaten)
+    if jenjang:
+        query += " AND p.jenjang = ?"
+        params.append(jenjang)
+
+    query += " ORDER BY p.id DESC"
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+
+    hasil = []
+    for r in rows:
+        hasil.append({
+            "id": r[0],
+            "nama_mdt": r[1],
+            "jenjang": r[2],
+            "tahun": r[3],
+            "jumlah": r[4],
+            "kabupaten": r[5],
+            "batch": r[6],
+            "file_path": r[7]
+        })
+    return hasil
 
 
 def list_kabupaten():
@@ -332,3 +349,16 @@ def list_riwayat_verifikasi_kemenag():
             ORDER BY tanggal_verifikasi DESC
         """)
         return c.fetchall()
+
+def get_riwayat_verifikasi():
+    conn = _conn()
+    c = conn.cursor()
+    c.execute("""
+        SELECT nama_mdt, jenjang, tahun_pelajaran, status, verifikator, tanggal_verifikasi
+        FROM pengajuan
+        WHERE status IN ('Diverifikasi', 'Ditolak')
+        ORDER BY tanggal_verifikasi DESC
+    """)
+    data = c.fetchall()
+    conn.close()
+    return data

@@ -404,69 +404,34 @@ def pengajuan_mdt():
 @app.route("/hasil_mdt")
 @require_role("mdt")
 def hasil_mdt():
-    """
-    Halaman MDT untuk melihat hasil penetapan nomor ijazah mereka sendiri.
-    File diambil dari folder hasil_excel/ berdasarkan kode MDT pengguna.
-    """
-    import os
-    from flask import render_template
+    from services.mdt_service import list_hasil_penetapan
     user = current_user()
 
-    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
-    hasil_list = []
-
-    if os.path.exists(hasil_dir):
-        for f in os.listdir(hasil_dir):
-            if user["kode_mdt"] in f:  # contoh: HASIL_MDT001_2024_Ula.xlsx
-                # parsing nama file: HASIL_<kode>_<tahun>_<jenjang>.xlsx
-                parts = f.replace(".xlsx", "").split("_")
-                tahun = parts[2] if len(parts) > 2 else "-"
-                jenjang = parts[3] if len(parts) > 3 else "-"
-                hasil_list.append({
-                    "file_name": f,
-                    "file_path": f"hasil_excel/{f}",
-                    "jenjang": jenjang,
-                    "tahun": tahun
-                })
-
+    hasil_list = list_hasil_penetapan(kode_mdt=user["kode_mdt"])
     return render_template("hasil_mdt.html", user=user, hasil_list=hasil_list)
 
 @app.route("/hasil_kanwil")
 @require_role(["kanwil", "admin"])
 def hasil_kanwil():
     from services.mdt_service import list_hasil_penetapan
-    from services.auth_service import current_user
+    user = current_user()
 
     kabupaten_dipilih = request.args.get("kabupaten", "")
     jenjang_dipilih = request.args.get("jenjang", "")
 
-    # Ambil semua data hasil penetapan dari service
-    hasil_list = list_hasil_penetapan()
+    hasil_list = list_hasil_penetapan(kabupaten=kabupaten_dipilih or None, jenjang=jenjang_dipilih or None)
 
-    # Tambahkan kolom kabupaten fallback bila belum ada
-    for h in hasil_list:
-        if "kabupaten" not in h:
-            h["kabupaten"] = h.get("wilayah", "Tidak diketahui")
-
-    # Filter berdasarkan kabupaten & jenjang
-    if kabupaten_dipilih:
-        hasil_list = [h for h in hasil_list if h.get("kabupaten") == kabupaten_dipilih]
-    if jenjang_dipilih:
-        hasil_list = [h for h in hasil_list if h.get("jenjang") == jenjang_dipilih]
-
-    # Daftar dropdown unik
-    semua_data = list_hasil_penetapan()
-    daftar_kabupaten = sorted(list({h.get("kabupaten") for h in semua_data}))
-    daftar_jenjang = sorted(list({h.get("jenjang") for h in semua_data}))
+    daftar_kabupaten = sorted({row["kabupaten"] for row in hasil_list if row["kabupaten"]})
+    daftar_jenjang = sorted({row["jenjang"] for row in hasil_list if row["jenjang"]})
 
     return render_template(
         "hasil_kanwil.html",
-        user=current_user(),  # ✅ fix utama agar tidak undefined
+        user=user,
         hasil_list=hasil_list,
         daftar_kabupaten=daftar_kabupaten,
         daftar_jenjang=daftar_jenjang,
         kabupaten_dipilih=kabupaten_dipilih,
-        jenjang_dipilih=jenjang_dipilih,
+        jenjang_dipilih=jenjang_dipilih
     )
 
 # ==============================
@@ -475,7 +440,11 @@ def hasil_kanwil():
 @app.route("/verifikasi", methods=["GET", "POST"])
 @require_role("kankemenag")
 def verifikasi_kemenag():
-    from services.mdt_service import list_pengajuan_for_kemenag, update_status_pengajuan
+    from services.mdt_service import (
+        list_pengajuan_for_kemenag,
+        update_status_pengajuan,
+        get_riwayat_verifikasi,  # ✅ Tambahkan fungsi riwayat
+    )
     user = current_user()
 
     if request.method == "POST":
@@ -483,7 +452,7 @@ def verifikasi_kemenag():
         status = request.form.get("status")
         alasan = request.form.get("alasan", "").strip() or None
 
-        # Normalisasi status agar konsisten
+        # 🟢 Normalisasi status agar seragam
         if status.lower() in ["setuju", "ya", "verifikasi", "diverifikasi", "approve", "acc"]:
             status_final = "Diverifikasi"
         elif status.lower() in ["tolak", "tidak", "no", "ditolak"]:
@@ -491,12 +460,45 @@ def verifikasi_kemenag():
         else:
             status_final = "Menunggu"
 
+        # 🟢 Update data verifikasi
         update_status_pengajuan(pengajuan_id, status_final, alasan, verifikator=user["username"])
+
         flash(f"✅ Pengajuan berhasil diperbarui sebagai {status_final}.", "success")
         return redirect(url_for("verifikasi_kemenag"))
 
+    # 🟢 Ambil data pengajuan menunggu verifikasi
     pengajuan_list = list_pengajuan_for_kemenag()
-    return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list)
+
+    # 🟢 Ambil riwayat verifikasi sebelumnya
+    riwayat_list = get_riwayat_verifikasi()
+
+    return render_template(
+        "verifikasi.html",
+        user=user,
+        pengajuan_list=pengajuan_list,
+        riwayat_list=riwayat_list,  # ✅ Kirim ke template
+    )
+
+def get_riwayat_verifikasi():
+    conn = _conn()
+    c = conn.cursor()
+    c.execute("""
+        SELECT 
+            nama_mdt,
+            jenjang,
+            tahun_pelajaran,
+            jumlah_lulus,
+            status,
+            verifikator,
+            tanggal_verifikasi,
+            alasan
+        FROM pengajuan
+        WHERE status IN ('Diverifikasi', 'Ditolak')
+        ORDER BY tanggal_verifikasi DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 @app.route("/riwayat_verifikasi")
 @require_role("kankemenag")

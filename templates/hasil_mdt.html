@@ -25,21 +25,24 @@
         </thead>
         <tbody>
           {% for h in hasil_list %}
-          <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ h.jenjang }}</td>
-            <td>{{ h.tahun }}</td>
-            <td>
-              <button class="btn btn-outline-success btn-sm"
-                      onclick="previewExcel('{{ url_for('preview_excel', filename=h.file_name) }}')">
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ h.jenjang }}</td>
+          <td>{{ h.tahun }}</td>
+          <td>
+            {% if h.file_path %}
+              <button class="btn btn-sm btn-outline-success" onclick="previewExcelFromRow('{{ h.file_path }}')">
                 <i class="bi bi-eye"></i> Lihat
               </button>
-              <a href="/hasil_excel/{{ h.file_name }}" download class="btn btn-success btn-sm">
+              <a href="/{{ h.file_path }}" class="btn btn-sm btn-success">
                 <i class="bi bi-download"></i> Unduh
               </a>
-            </td>
-          </tr>
-          {% endfor %}
+            {% else %}
+              <span class="text-muted">Belum ada file</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
         </tbody>
       </table>
     </div>

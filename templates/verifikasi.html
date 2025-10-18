@@ -35,14 +35,15 @@
             <td>{{ p[4] }}</td>
             <td>{{ p[5] }}</td>
             <td>
-              {% if p[6] %}
-              <button class="btn btn-sm btn-outline-success"
-                      onclick="previewFile('{{ p[6] | replace('\\', '/') }}')">
-                <i class="bi bi-eye"></i> Lihat
-              </button>
-              {% else %}
-              <span class="text-muted">Tidak ada file</span>
-              {% endif %}
+              <td>
+                {% if p[5] %}
+                  <a href="{{ url_for('static', filename=p[5].replace('uploads/', 'uploads/')) }}" class="btn btn-sm btn-outline-success" target="_blank">
+                    <i class="bi bi-eye"></i> Lihat
+                  </a>
+                {% else %}
+                  <span class="text-muted">Tidak ada file</span>
+                {% endif %}
+              </td>
             </td>
             <td>
               <span class="badge {% if p[8] == 'Diverifikasi' %}bg-success{% elif p[8] == 'Ditolak' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
@@ -137,6 +138,55 @@
             <td>{{ r[7] or '-' }}</td>
           </tr>
           {% endfor %}
+
+          <div class="card mt-4 shadow-sm border-0">
+          <div class="card-header bg-secondary text-white">
+            <i class="bi bi-clock-history"></i> Riwayat Verifikasi Sebelumnya
+          </div>
+          <div class="card-body">
+            {% if riwayat_list %}
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>No</th>
+                    <th>Nama MDT</th>
+                    <th>Jenjang</th>
+                    <th>Tahun</th>
+                    <th>Jumlah</th>
+                    <th>Status</th>
+                    <th>Verifikator</th>
+                    <th>Tanggal</th>
+                    <th>Alasan (jika ditolak)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in riwayat_list %}
+                  <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ r[0] }}</td>
+                    <td>{{ r[1] }}</td>
+                    <td>{{ r[2] }}</td>
+                    <td>{{ r[3] }}</td>
+                    <td>
+                      <span class="badge {% if r[4] == 'Diverifikasi' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ r[4] }}
+                      </span>
+                    </td>
+                    <td>{{ r[5] or '-' }}</td>
+                    <td>{{ r[6] or '-' }}</td>
+                    <td>{{ r[7] or '-' }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <div class="text-center text-muted py-4">
+                <i class="bi bi-hourglass-split display-6"></i><br>
+                Belum ada riwayat verifikasi.
+              </div>
+            {% endif %}
+          </div>
+        </div>
         </tbody>
       </table>
       {% else %}
