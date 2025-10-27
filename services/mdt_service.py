@@ -34,10 +34,13 @@ def _conn():
 # ======================
 # MIGRASI / INIT
 # ======================
+
 def init_db():
+    """Membuat kolom & tabel tambahan jika belum ada"""
     with _conn() as conn:
         c = conn.cursor()
-        # pastikan kolom ada
+
+        # Tambah kolom baru di pengajuan bila belum ada
         for col, tipe in [
             ("alasan", "TEXT"),
             ("kabupaten", "TEXT"),
@@ -48,6 +51,23 @@ def init_db():
                 c.execute(f"ALTER TABLE pengajuan ADD COLUMN {col} {tipe}")
             except sqlite3.OperationalError:
                 pass  # kolom sudah ada
+
+        # ✅ Buat tabel riwayat_verifikasi jika belum ada
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pengajuan_id INTEGER,
+            nama_mdt TEXT,
+            jenjang TEXT,
+            tahun TEXT,
+            jumlah_lulus INTEGER,
+            status TEXT,
+            alasan TEXT,
+            verifikator TEXT,
+            tanggal_verifikasi TEXT
+        )
+        """)
+
         conn.commit()
 
 # ======================
@@ -120,43 +140,6 @@ def list_pengajuan_for_kemenag():
         """)
         return c.fetchall()
 
-# =========================================================
-# 🔸 Fungsi update status verifikasi dari Kemenag
-# =========================================================
-def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Normalisasi status dengan aman
-    status_clean = status.strip().lower()
-    if status_clean in ["diverifikasi", "verifikasi", "setuju", "ya", "acc", "approve"]:
-        status_final = "Diverifikasi"
-    elif status_clean in ["tolak", "ditolak", "tidak", "no"]:
-        status_final = "Ditolak"
-    else:
-        status_final = "Menunggu"
-
-    with _conn() as conn:
-        c = conn.cursor()
-
-        # Pastikan kolom tambahan ada
-        for col, tipe in [
-            ("alasan", "TEXT"),
-            ("verifikator", "TEXT"),
-            ("tanggal_verifikasi", "TEXT")
-        ]:
-            try:
-                c.execute(f"ALTER TABLE pengajuan ADD COLUMN {col} {tipe}")
-            except sqlite3.OperationalError:
-                pass
-
-        # Simpan perubahan
-        c.execute("""
-            UPDATE pengajuan
-            SET status=?, alasan=?, verifikator=?, tanggal_verifikasi=?
-            WHERE id=?
-        """, (status_final, alasan, verifikator, now, pengajuan_id))
-        conn.commit()
-
 # ======================
 # KANWIL: PENETAPAN NOMOR IJAZAH
 # ======================
@@ -174,56 +157,76 @@ def list_pengajuan_for_kanwil():
         return c.fetchall()
 
 
-# =========================================================
-# 🔸 Fungsi penetapan dari Kanwil
-# =========================================================
 # ==========================================
 # 🔹 Penetapan oleh Kanwil
 # ==========================================
 def tetapkan_pengajuan(pengajuan_id):
-    conn = _conn()
-    c = conn.cursor()
+    """Kanwil menetapkan pengajuan dan generate file hasil berisi nomor ijazah"""
+    import datetime
 
-    # Update status pengajuan
-    if IS_POSTGRES:
-        c.execute("UPDATE pengajuan SET status = %s WHERE id = %s", ('Ditetapkan', pengajuan_id))
-    else:
-        c.execute("UPDATE pengajuan SET status = ? WHERE id = ?", ('Ditetapkan', pengajuan_id))
+    # 🔹 Jalankan generate dulu agar tidak bentrok koneksi SQLite
+    hasil_file = generate_nomor_ijazah_batch(pengajuan_id)
 
-    # Simulasi generate nomor ijazah
-    if IS_POSTGRES:
-        c.execute("INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang) VALUES (%s, %s, %s, %s, %s, %s)", 
-                  (pengajuan_id, 'Dummy Santri', '0001', f'IJZ-{pengajuan_id}-2025', '2025', 'Wustha'))
-    else:
-        c.execute("INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang) VALUES (?, ?, ?, ?, ?, ?)", 
-                  (pengajuan_id, 'Dummy Santri', '0001', f'IJZ-{pengajuan_id}-2025', '2025', 'Wustha'))
-
-    conn.commit()
-    conn.close()
-
-def generate_nomor_ijazah_batch(pengajuan_id):
-    """Generate nomor ijazah dari file Excel"""
+    # 🔹 Setelah hasil berhasil dibuat, update tabel pengajuan
     with _conn() as conn:
         c = conn.cursor()
-        c.execute("SELECT file_lulusan, jenjang, tahun_pelajaran, nama_mdt FROM pengajuan WHERE id=?", (pengajuan_id,))
-        data = c.fetchone()
-        if not data:
-            raise Exception("Data pengajuan tidak ditemukan.")
+        c.execute("""
+            UPDATE pengajuan
+            SET status='Ditetapkan',
+                file_hasil=?,
+                tanggal_verifikasi=? 
+            WHERE id=?
+        """, (
+            hasil_file,
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            pengajuan_id
+        ))
+        conn.commit()
 
-        file_path, jenjang, tahun, nama_mdt = data
-        if not os.path.exists(file_path):
-            raise Exception(f"File Excel {file_path} tidak ditemukan.")
+    print(f"✅ Pengajuan {pengajuan_id} berhasil ditetapkan → {hasil_file}")
+    return hasil_file
 
-        df = pd.read_excel(file_path)
-        df.columns = [str(x).strip().lower() for x in df.columns]
+def generate_nomor_ijazah_batch(pengajuan_id):
+    """Generate nomor ijazah dari file upload MDT dan simpan hasil ke hasil_excel"""
+    import pandas as pd
+    import os, datetime
 
-        nama_col = next((col for col in df.columns if "nama" in col), None)
-        nis_col = next((col for col in df.columns if "nis" in col or "nomor induk" in col), None)
+    # Pastikan folder hasil_excel ada
+    os.makedirs("hasil_excel", exist_ok=True)
+
+    with _conn() as conn:
+        c = conn.cursor()
+
+        # Ambil data pengajuan
+        c.execute("""
+            SELECT file_lulusan, jenjang, tahun_pelajaran, nama_mdt
+            FROM pengajuan WHERE id=?
+        """, (pengajuan_id,))
+        row = c.fetchone()
+        if not row:
+            raise Exception("❌ Data pengajuan tidak ditemukan.")
+
+        file_lulusan, jenjang, tahun, nama_mdt = row
+
+        # Validasi file upload
+        if not file_lulusan or not os.path.exists(file_lulusan):
+            raise Exception(f"❌ File upload tidak ditemukan: {file_lulusan}")
+
+        # Baca file Excel asli
+        df = pd.read_excel(file_lulusan)
+        df.columns = [str(col).strip().lower().replace(" ", "_") for col in df.columns]
+
+        # Deteksi kolom nama santri & NIS otomatis
+        nama_col = next((c for c in df.columns if "nama_santri" in c or c.startswith("nama")), None)
+        nis_col = next((c for c in df.columns if "nomor_induk" in c or "nis" in c), None)
+
         if not nama_col or not nis_col:
-            raise Exception("File Excel harus memiliki kolom 'Nama' dan 'NIS'.")
+            raise Exception("File wajib memiliki kolom 'Nama Santri' dan 'Nomor Induk Santri'.")
 
-        kode_jenjang = {"Ula": "I", "Wustha": "II", "Ulya": "III"}.get(jenjang, "I")
+        # Kode jenjang (I = Ula, II = Wustha, III = Ulya)
+        kode_jenjang = {"Ula": "I", "Wustha": "II", "Ulya": "III"}.get(jenjang.capitalize(), "I")
 
+        # Hitung total nomor ijazah yang sudah ada
         c.execute("SELECT COUNT(*) FROM nomor_ijazah")
         start = c.fetchone()[0] or 0
 
@@ -232,21 +235,39 @@ def generate_nomor_ijazah_batch(pengajuan_id):
             urut = str(start + i + 1).zfill(6)
             no_ijazah = f"MDT-12-{kode_jenjang}-{tahun}-{urut}"
             nomor_list.append((pengajuan_id, row[nama_col], str(row[nis_col]), no_ijazah, tahun, jenjang))
+
+        # Tambahkan kolom hasil ke Excel
         df["Nomor Ijazah"] = [n[3] for n in nomor_list]
 
-        os.makedirs("hasil_excel", exist_ok=True)
-        output = f"hasil_excel/HASIL_{nama_mdt}_{tahun}_{jenjang}.xlsx"
-        df.to_excel(output, index=False)
+        # Simpan file hasil
+        safe_nama = nama_mdt.replace(" ", "_").replace("/", "_")
+        output_path = os.path.join("hasil_excel", f"HASIL_{safe_nama}_{tahun}_{jenjang}.xlsx")
 
+        # Hapus file lama jika sudah ada
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        df.to_excel(output_path, index=False)
+
+        # Simpan ke DB tabel nomor_ijazah
         c.executemany("""
             INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang)
             VALUES (?, ?, ?, ?, ?, ?)
         """, nomor_list)
-        c.execute("UPDATE pengajuan SET status='Ditetapkan' WHERE id=?", (pengajuan_id,))
+
+        # Update pengajuan agar status & file hasil sinkron
+        c.execute("""
+            UPDATE pengajuan
+            SET status='Ditetapkan',
+                file_hasil=?,
+                tanggal_verifikasi=?
+            WHERE id=?
+        """, (output_path, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), pengajuan_id))
+
         conn.commit()
 
-        return output
-
+    print(f"✅ File hasil disimpan di: {output_path}")
+    return output_path
 
 # ======================
 # MDT & KANWIL: HASIL
@@ -334,31 +355,137 @@ def list_hasil_penetapan_by_role(role):
         return c.fetchall()
 
 
-# ==========================================
-# 🔹 Riwayat Verifikasi untuk Kemenag
-# ==========================================
-def list_riwayat_verifikasi_kemenag():
+# ======================
+# KANKEMENAG: VERIFIKASI
+# ======================
+def list_pengajuan_for_kemenag():
     with _conn() as conn:
         c = conn.cursor()
         c.execute("""
-            SELECT nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
-                   jumlah_lulus, status, kabupaten, alasan, verifikator,
-                   tanggal_verifikasi
+            SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
+                   file_lulusan, status, kabupaten
             FROM pengajuan
-            WHERE status IN ('Diverifikasi', 'Ditolak')
+            WHERE status = 'Menunggu'
+            ORDER BY id DESC
+        """)
+        return c.fetchall()
+
+
+# =========================================================
+# 🔸 Fungsi update status verifikasi dari Kemenag
+# =========================================================
+def update_status_pengajuan(pengajuan_id, status, alasan=None, verifikator=None):
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    status_clean = status.strip().lower()
+    if status_clean in ["diverifikasi", "verifikasi", "setuju", "ya", "acc", "approve"]:
+        status_final = "Diverifikasi"
+    elif status_clean in ["tolak", "ditolak", "tidak", "no"]:
+        status_final = "Ditolak"
+    else:
+        status_final = "Menunggu"
+
+    with _conn() as conn:
+        c = conn.cursor()
+
+        # Ambil data pengajuan
+        c.execute("SELECT nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus FROM pengajuan WHERE id=?", (pengajuan_id,))
+        data = c.fetchone()
+        nama_mdt, jenjang, tahun, jumlah_lulus = data if data else ("-", "-", "-", 0)
+
+        # Update pengajuan
+        c.execute("""
+            UPDATE pengajuan
+            SET status=?, alasan=?, verifikator=?, tanggal_verifikasi=?
+            WHERE id=?
+        """, (status_final, alasan, verifikator, now, pengajuan_id))
+
+        # Simpan log riwayat di koneksi yang sama
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pengajuan_id INTEGER,
+                nama_mdt TEXT,
+                jenjang TEXT,
+                tahun TEXT,
+                jumlah_lulus INTEGER,
+                status TEXT,
+                alasan TEXT,
+                verifikator TEXT,
+                tanggal_verifikasi TEXT
+            )
+        """)
+        c.execute("""
+            INSERT INTO riwayat_verifikasi
+            (pengajuan_id, nama_mdt, jenjang, tahun, jumlah_lulus, status, alasan, verifikator, tanggal_verifikasi)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pengajuan_id, nama_mdt, jenjang, tahun, jumlah_lulus, status_final, alasan, verifikator, now))
+
+        conn.commit()
+        
+# =========================================
+# 🔹 SIMPAN LOG RIWAYAT VERIFIKASI
+# =========================================
+def simpan_riwayat_verifikasi(pengajuan_id, nama_mdt, jenjang, tahun, jumlah_lulus, status, alasan, verifikator):
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pengajuan_id INTEGER,
+                nama_mdt TEXT,
+                jenjang TEXT,
+                tahun TEXT,
+                jumlah_lulus INTEGER,
+                status TEXT,
+                alasan TEXT,
+                verifikator TEXT,
+                tanggal_verifikasi TEXT
+            )
+        """)
+        c.execute("""
+            INSERT INTO riwayat_verifikasi 
+            (pengajuan_id, nama_mdt, jenjang, tahun, jumlah_lulus, status, alasan, verifikator, tanggal_verifikasi)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (pengajuan_id, nama_mdt, jenjang, tahun, jumlah_lulus, status, alasan, verifikator, now))
+        conn.commit()
+
+# =========================================
+# 🔹 RIWAYAT KHUSUS UNTUK HALAMAN RIWAYAT
+# =========================================
+def list_riwayat_verifikasi_kemenag():
+    with _conn() as conn:
+        c = conn.cursor()
+        # Pastikan tabel riwayat ada (biar gak error no such table)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pengajuan_id INTEGER,
+                nama_mdt TEXT,
+                jenjang TEXT,
+                tahun TEXT,
+                status TEXT,
+                alasan TEXT,
+                verifikator TEXT,
+                tanggal_verifikasi TEXT
+            )
+        """)
+
+        # Ambil semua riwayat dengan urutan terbaru
+        c.execute("""
+            SELECT 
+                nama_mdt,      -- [0]
+                jenjang,       -- [1]
+                tahun,         -- [2]
+                NULL,          -- [3] (jumlah lulus tidak disimpan di sini)
+                status,        -- [4]
+                alasan,        -- [5]
+                verifikator,   -- [6]
+                tanggal_verifikasi -- [7]
+            FROM riwayat_verifikasi
             ORDER BY tanggal_verifikasi DESC
         """)
         return c.fetchall()
 
-def get_riwayat_verifikasi():
-    conn = _conn()
-    c = conn.cursor()
-    c.execute("""
-        SELECT nama_mdt, jenjang, tahun_pelajaran, status, verifikator, tanggal_verifikasi
-        FROM pengajuan
-        WHERE status IN ('Diverifikasi', 'Ditolak')
-        ORDER BY tanggal_verifikasi DESC
-    """)
-    data = c.fetchall()
-    conn.close()
-    return data
+

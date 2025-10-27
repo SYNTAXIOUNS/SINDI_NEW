@@ -30,12 +30,13 @@
           {% for p in pengajuan_list %}
           <tr>
             <td>{{ loop.index }}</td>
+            <td>{{ p[1] }}</td>
             <td>{{ p[2] }}</td>
             <td>{{ p[3] }}</td>
             <td>{{ p[4] }}</td>
             <td>{{ p[5] }}</td>
             <td>
-              <td>
+            <td>
                 {% if p[5] %}
                   <a href="{{ url_for('static', filename=p[5].replace('uploads/', 'uploads/')) }}" class="btn btn-sm btn-outline-success" target="_blank">
                     <i class="bi bi-eye"></i> Lihat
@@ -102,103 +103,64 @@
   {% endif %}
 
   <!-- ==================== RIWAYAT VERIFIKASI ==================== -->
-  <div class="card shadow-sm border-0 mt-5">
-    <div class="card-header bg-secondary text-white">
-      <i class="bi bi-clock-history"></i> Riwayat Verifikasi Sebelumnya
-    </div>
-    <div class="card-body table-responsive">
-      {% if riwayat_list %}
-      <table class="table table-hover align-middle">
-        <thead class="table-secondary">
-          <tr>
-            <th>No</th>
-            <th>Nomor Batch</th>
-            <th>Nama MDT</th>
-            <th>Status</th>
-            <th>Verifikator</th>
-            <th>Tanggal</th>
-            <th>Alasan (Jika Ditolak)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in riwayat_list %}
-          <tr>
-            <td>{{ loop.index }}</td>
-            <td><span class="badge bg-light text-dark">{{ r[0] }}</span></td>
-            <td>{{ r[1] }}</td>
-            <td>
-              {% if r[5] == 'Diverifikasi' %}
-                <span class="badge bg-success">Diverifikasi</span>
-              {% else %}
-                <span class="badge bg-danger">Ditolak</span>
-              {% endif %}
-            </td>
-            <td>{{ r[8] or '-' }}</td>
-            <td>{{ r[9] or '-' }}</td>
-            <td>{{ r[7] or '-' }}</td>
-          </tr>
-          {% endfor %}
-
-          <div class="card mt-4 shadow-sm border-0">
-          <div class="card-header bg-secondary text-white">
-            <i class="bi bi-clock-history"></i> Riwayat Verifikasi Sebelumnya
-          </div>
-          <div class="card-body">
-            {% if riwayat_list %}
-              <table class="table table-hover align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th>No</th>
-                    <th>Nama MDT</th>
-                    <th>Jenjang</th>
-                    <th>Tahun</th>
-                    <th>Jumlah</th>
-                    <th>Status</th>
-                    <th>Verifikator</th>
-                    <th>Tanggal</th>
-                    <th>Alasan (jika ditolak)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for r in riwayat_list %}
-                  <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ r[0] }}</td>
-                    <td>{{ r[1] }}</td>
-                    <td>{{ r[2] }}</td>
-                    <td>{{ r[3] }}</td>
-                    <td>
-                      <span class="badge {% if r[4] == 'Diverifikasi' %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ r[4] }}
-                      </span>
-                    </td>
-                    <td>{{ r[5] or '-' }}</td>
-                    <td>{{ r[6] or '-' }}</td>
-                    <td>{{ r[7] or '-' }}</td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% else %}
-              <div class="text-center text-muted py-4">
-                <i class="bi bi-hourglass-split display-6"></i><br>
-                Belum ada riwayat verifikasi.
-              </div>
-            {% endif %}
-          </div>
-        </div>
-        </tbody>
-      </table>
-      {% else %}
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-hourglass display-5"></i>
-        <p>Belum ada riwayat verifikasi.</p>
-      </div>
-      {% endif %}
-    </div>
+  <!-- Riwayat Verifikasi Sebelumnya -->
+<!--<div class="card shadow-sm mt-4 border-0">
+  <div class="card-header bg-secondary text-white">
+    <i class="bi bi-clock-history"></i> Riwayat Verifikasi Sebelumnya
   </div>
-
+  <div class="card-body">
+    {% if riwayat_list %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-secondary">
+            <tr>
+              <th>No</th>
+              <th>Nama MDT</th>
+              <th>Jenjang</th>
+              <th>Tahun</th>
+              <th>Jumlah</th>
+              <th>Status</th>
+              <th>Verifikator</th>
+              <th>Tanggal</th>
+              <th>Alasan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in riwayat_list %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ r[0] }}</td>
+              <td>{{ r[1] }}</td>
+              <td>{{ r[2] }}</td>
+              <td>{{ r[3] }}</td>
+              <td>
+                {% if r[4] == 'Diverifikasi' %}
+                <span class="badge bg-success">{{ r[4] }}</span>
+                {% elif r[4] == 'Ditolak' %}
+                <span class="badge bg-danger">{{ r[4] }}</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">{{ r[4] }}</span>
+                {% endif %}
+              </td>
+              <td>{{ r[6] }}</td>
+              <td>{{ r[7] }}</td>
+              <td>{{ r[5] or '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-hourglass-split display-5"></i>
+        <p class="mt-3">Belum ada riwayat verifikasi.</p>
+      </div>
+    {% endif %}
+  </div>
 </div>
+
+
+</div>-->
 
 <!-- Modal Preview -->
 <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">

@@ -11,7 +11,7 @@
   {% if hasil_list %}
   <div class="card shadow-sm border-0">
     <div class="card-header bg-success text-white">
-      <i class="bi bi-archive"></i> Daftar Hasil Penetapan Ijazah
+      <i class="bi bi-archive"></i> Daftar Hasil Penetapan
     </div>
     <div class="card-body table-responsive">
       <table class="table table-hover align-middle">
@@ -20,29 +20,32 @@
             <th>No</th>
             <th>Jenjang</th>
             <th>Tahun</th>
+            <th>Jumlah Lulus</th>
             <th>File Hasil</th>
           </tr>
         </thead>
         <tbody>
           {% for h in hasil_list %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td>{{ h.jenjang }}</td>
-          <td>{{ h.tahun }}</td>
-          <td>
-            {% if h.file_path %}
-              <button class="btn btn-sm btn-outline-success" onclick="previewExcelFromRow('{{ h.file_path }}')">
-                <i class="bi bi-eye"></i> Lihat
-              </button>
-              <a href="/{{ h.file_path }}" class="btn btn-sm btn-success">
-                <i class="bi bi-download"></i> Unduh
-              </a>
-            {% else %}
-              <span class="text-muted">Belum ada file</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ h.jenjang }}</td>
+            <td>{{ h.tahun }}</td>
+            <td>{{ h.jumlah }}</td>
+            <td>
+              {% if h.file_path %}
+                {% set filename = h.file_path.split('/')[-1] %}
+                <button class="btn btn-sm btn-outline-success" onclick="previewExcelModal('{{ filename }}')">
+                  <i class="bi bi-eye"></i> Lihat
+                </button>
+                <a href="/hasil_excel/{{ filename }}" download class="btn btn-success btn-sm">
+                  <i class="bi bi-download"></i> Unduh
+                </a>
+              {% else %}
+                <span class="text-muted">Belum ada file</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
         </tbody>
       </table>
     </div>
@@ -71,10 +74,11 @@
 </div>
 
 <script>
-function previewExcel(url) {
-  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
-  const iframe = document.getElementById('previewFrame');
+function previewExcelModal(filename) {
+  const url = `/preview_excel/${filename}`;
+  const iframe = document.getElementById("previewFrame");
   iframe.src = url;
+  const modal = new bootstrap.Modal(document.getElementById("previewModal"));
   modal.show();
 }
 </script>

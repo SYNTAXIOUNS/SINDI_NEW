@@ -9,6 +9,7 @@ from services.admin_service import list_users, create_user
 from services.mdt_service import (
     create_pengajuan_batch,
     list_pengajuan_batch_by_mdt,
+    init_db,
     list_pengajuan_for_kemenag,
     update_status_pengajuan,
     list_pengajuan_for_kanwil,
@@ -63,6 +64,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_NAME = os.path.join(BASE_DIR, "sindi.db")
 print(f"📂 Database aktif di: {DB_NAME}")
 
+try:
+    init_db()
+except Exception as e:
+    print(f"⚠️ Gagal inisialisasi database: {e}")
 # =======================================
 # Opsional: Jika nanti DATABASE_URL (PostgreSQL) tersedia
 # maka otomatis gunakan PostgreSQL
@@ -105,79 +110,53 @@ def allowed_file(filename: str) -> bool:
 #  INIT DATABASE (aman, idempotent)
 # ==============================
 def init_db():
-    """Buat tabel utama bila belum ada"""
-    conn = get_connection()
-    c = conn.cursor()
+    """Pastikan semua tabel dan kolom penting sudah ada."""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
 
-    print("🧱 Membuat tabel bila belum ada...")
+        # 🔹 Pastikan kolom penting di pengajuan
+        for col, tipe in [
+            ("alasan", "TEXT"),
+            ("kabupaten", "TEXT"),
+            ("tanggal_verifikasi", "TEXT"),
+            ("verifikator", "TEXT"),
+        ]:
+            try:
+                c.execute(f"ALTER TABLE pengajuan ADD COLUMN {col} {tipe}")
+            except sqlite3.OperationalError:
+                pass
 
-    # users
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username TEXT UNIQUE,
-        password TEXT,
-        role TEXT,
-        kode_mdt TEXT,
-        wilayah TEXT
-    )
-    """)
-
-    # pengajuan
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS pengajuan (
-        id SERIAL PRIMARY KEY,
-        nama_mdt TEXT,
-        jenjang TEXT,
-        tahun_pelajaran TEXT,
-        jumlah_lulus INTEGER,
-        file_lulusan TEXT,
-        tanggal_pengajuan TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        status TEXT,
-        nomor_batch TEXT,
-        rekomendasi_file TEXT,
-        mdt_id INTEGER,
-        kabupaten TEXT
-    )
-    """)
-
-    # nomor_ijazah
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS nomor_ijazah (
-        id SERIAL PRIMARY KEY,
-        pengajuan_id INTEGER,
-        nama_santri TEXT,
-        nis TEXT,
-        nomor_ijazah TEXT,
-        tahun TEXT,
-        jenjang TEXT
-    )
-    """)
-
-    # log aktivitas
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS log_aktivitas (
-        id SERIAL PRIMARY KEY,
-        username TEXT,
-        aksi TEXT,
-        waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
-    # tambahkan akun default bila kosong
-    c.execute("SELECT COUNT(*) FROM users")
-    if c.fetchone()[0] == 0:
+        # 🔹 Buat tabel nomor_ijazah (kalau belum ada)
         c.execute("""
-        INSERT INTO users (username, password, role, kode_mdt, wilayah) VALUES
-        ('admin', '123', 'admin', NULL, 'Kanwil Jawa Barat'),
-        ('kanwil', '123', 'kanwil', NULL, 'Jawa Barat'),
-        ('kankemenag', '123', 'kankemenag', NULL, 'Kota Bandung')
+        CREATE TABLE IF NOT EXISTS nomor_ijazah (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pengajuan_id INTEGER,
+            nama_santri TEXT,
+            nis TEXT,
+            nomor_ijazah TEXT,
+            tahun TEXT,
+            jenjang TEXT
+        )
         """)
-        print("✅ Akun default dibuat: admin, kanwil, kankemenag")
 
-    conn.commit()
-    conn.close()
-    print("✅ Database siap digunakan.")
+        # 🔹 Buat tabel riwayat_verifikasi (kalau belum ada)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pengajuan_id INTEGER,
+            nama_mdt TEXT,
+            jenjang TEXT,
+            tahun TEXT,
+            jumlah_lulus INTEGER,
+            status TEXT,
+            alasan TEXT,
+            verifikator TEXT,
+            tanggal_verifikasi TEXT
+        )
+        """)
+
+        conn.commit()
+        print("✅ Semua tabel utama & riwayat_verifikasi sudah dicek/dibuat.")
 
 def init_master_kabupaten():
     kabupaten_jabar = [
@@ -440,11 +419,7 @@ def hasil_kanwil():
 @app.route("/verifikasi", methods=["GET", "POST"])
 @require_role("kankemenag")
 def verifikasi_kemenag():
-    from services.mdt_service import (
-        list_pengajuan_for_kemenag,
-        update_status_pengajuan,
-        get_riwayat_verifikasi,  # ✅ Tambahkan fungsi riwayat
-    )
+    from services.mdt_service import list_pengajuan_for_kemenag, update_status_pengajuan, list_riwayat_verifikasi_kemenag
     user = current_user()
 
     if request.method == "POST":
@@ -452,61 +427,22 @@ def verifikasi_kemenag():
         status = request.form.get("status")
         alasan = request.form.get("alasan", "").strip() or None
 
-        # 🟢 Normalisasi status agar seragam
-        if status.lower() in ["setuju", "ya", "verifikasi", "diverifikasi", "approve", "acc"]:
-            status_final = "Diverifikasi"
-        elif status.lower() in ["tolak", "tidak", "no", "ditolak"]:
-            status_final = "Ditolak"
-        else:
-            status_final = "Menunggu"
-
-        # 🟢 Update data verifikasi
-        update_status_pengajuan(pengajuan_id, status_final, alasan, verifikator=user["username"])
-
-        flash(f"✅ Pengajuan berhasil diperbarui sebagai {status_final}.", "success")
+        update_status_pengajuan(pengajuan_id, status, alasan, user["username"])
+        flash(f"✅ Pengajuan berhasil diperbarui sebagai {status}.", "success")
         return redirect(url_for("verifikasi_kemenag"))
 
-    # 🟢 Ambil data pengajuan menunggu verifikasi
     pengajuan_list = list_pengajuan_for_kemenag()
+    riwayat_list = list_riwayat_verifikasi_kemenag()
+    return render_template("verifikasi.html", user=user, pengajuan_list=pengajuan_list, riwayat_list=riwayat_list)
 
-    # 🟢 Ambil riwayat verifikasi sebelumnya
-    riwayat_list = get_riwayat_verifikasi()
-
-    return render_template(
-        "verifikasi.html",
-        user=user,
-        pengajuan_list=pengajuan_list,
-        riwayat_list=riwayat_list,  # ✅ Kirim ke template
-    )
-
-def get_riwayat_verifikasi():
-    conn = _conn()
-    c = conn.cursor()
-    c.execute("""
-        SELECT 
-            nama_mdt,
-            jenjang,
-            tahun_pelajaran,
-            jumlah_lulus,
-            status,
-            verifikator,
-            tanggal_verifikasi,
-            alasan
-        FROM pengajuan
-        WHERE status IN ('Diverifikasi', 'Ditolak')
-        ORDER BY tanggal_verifikasi DESC
-    """)
-    rows = c.fetchall()
-    conn.close()
-    return rows
 
 @app.route("/riwayat_verifikasi")
 @require_role("kankemenag")
 def riwayat_verifikasi():
     from services.mdt_service import list_riwayat_verifikasi_kemenag
     user = current_user()
-    riwayat = list_riwayat_verifikasi_kemenag()
-    return render_template("riwayat_verifikasi.html", user=user, riwayat=riwayat)
+    riwayat_list = list_riwayat_verifikasi_kemenag()
+    return render_template("riwayat_verifikasi.html", user=user, riwayat_list=riwayat_list)
 
 # ==============================
 #  KANWIL: Penetapan + Export (Excel/PDF)
@@ -658,28 +594,46 @@ import os
 import pandas as pd
 from flask import render_template
 
-@app.route("/preview_excel/<path:filename>")
-def preview_excel(filename):
-    filename = unquote(filename)  # decode karakter khusus seperti spasi, tanda petik, dll
+def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
+    conn = _conn()
+    c = conn.cursor()
+    query = """
+        SELECT 
+            p.id, p.nama_mdt, p.jenjang, p.tahun_pelajaran, 
+            p.jumlah_lulus, p.kabupaten, p.nomor_batch, 
+            COALESCE(p.file_hasil, p.file_lulusan) AS file_path
+        FROM pengajuan p
+        WHERE p.status = 'Ditetapkan'
+        ORDER BY p.id DESC
+    """
+    c.execute(query)
+    rows = c.fetchall()
+    conn.close()
 
-    # 🔹 Ganti direktori ke folder hasil_excel
-    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
-    file_path = os.path.join(hasil_dir, filename)
+    hasil = []
+    for r in rows:
+        hasil.append({
+            "id": r[0],
+            "nama_mdt": r[1],
+            "jenjang": r[2],
+            "tahun": r[3],
+            "jumlah": r[4],
+            "kabupaten": r[5],
+            "batch": r[6],
+            "file_path": r[7] or ""
+        })
+    return hasil
 
-    if not os.path.exists(file_path):
-        return f"<h4 class='text-danger'>❌ File tidak ditemukan: {file_path}</h4>"
+@app.route("/uploads/<path:filename>")
+def download_uploads(filename):
+    """Unduh file yang diupload MDT"""
+    return send_from_directory("uploads", filename, as_attachment=True)
 
-    try:
-        # tampilkan semua baris dan kolom
-        pd.set_option("display.max_rows", None)
-        pd.set_option("display.max_columns", None)
 
-        df = pd.read_excel(file_path)
-        df_html = df.to_html(classes="table table-bordered table-striped", index=False)
-
-        return render_template("preview_excel.html", table_html=df_html, filename=filename)
-    except Exception as e:
-        return f"<h4 class='text-danger'>❌ Gagal memuat file Excel:<br>{e}</h4>"
+@app.route("/hasil_excel/<path:filename>")
+def download_hasil_excel(filename):
+    """Unduh file hasil generate oleh Kanwil"""
+    return send_from_directory("hasil_excel", filename, as_attachment=True)
 
 @app.route("/preview-file/<path:filename>")
 def preview_file(filename):
