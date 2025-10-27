@@ -632,7 +632,7 @@ def download_uploads(filename):
 
 @app.route("/hasil_excel/<path:filename>")
 def download_hasil_excel(filename):
-    """Unduh file hasil generate oleh Kanwil"""
+    from flask import send_from_directory
     return send_from_directory("hasil_excel", filename, as_attachment=True)
 
 @app.route("/preview-file/<path:filename>")
@@ -676,6 +676,31 @@ def preview_file(filename):
             </a></p>
         </div>
         """
+        
+@app.route("/preview_excel/<path:filename>")
+def preview_excel(filename):
+    from urllib.parse import unquote
+    import pandas as pd
+
+    filename = unquote(filename)
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    uploads_dir = os.path.join(os.getcwd(), "uploads")
+
+    hasil_path = os.path.join(hasil_dir, filename)
+    upload_path = os.path.join(uploads_dir, filename)
+
+    if os.path.exists(hasil_path):
+        file_path = hasil_path
+    elif os.path.exists(upload_path):
+        file_path = upload_path
+    else:
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan:<br>{filename}</h4>"
+
+    df = pd.read_excel(file_path)
+    df_html = df.to_html(classes="table table-bordered table-striped", index=False)
+    return render_template("preview_excel.html", table_html=df_html, filename=filename)
+
+
 # ==============================
 #  ADMIN
 # ==============================

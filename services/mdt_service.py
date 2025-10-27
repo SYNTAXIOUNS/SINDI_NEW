@@ -288,7 +288,8 @@ def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
     query = """
         SELECT 
             p.id, p.nama_mdt, p.jenjang, p.tahun_pelajaran, 
-            p.jumlah_lulus, p.kabupaten, p.nomor_batch, p.file_lulusan
+            p.jumlah_lulus, p.kabupaten, p.nomor_batch, 
+            COALESCE(p.file_hasil, p.rekomendasi_file, p.file_lulusan)
         FROM pengajuan p
         WHERE p.status = 'Ditetapkan'
     """
@@ -311,6 +312,9 @@ def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
 
     hasil = []
     for r in rows:
+        file_path = r[7]
+        if file_path:
+            file_path = os.path.basename(file_path.replace("\\", "/"))
         hasil.append({
             "id": r[0],
             "nama_mdt": r[1],
@@ -319,10 +323,9 @@ def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
             "jumlah": r[4],
             "kabupaten": r[5],
             "batch": r[6],
-            "file_path": r[7]
+            "file_path": file_path
         })
     return hasil
-
 
 def list_kabupaten():
     with _conn() as conn:

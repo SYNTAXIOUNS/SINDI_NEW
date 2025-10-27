@@ -73,11 +73,13 @@
             <td><span class="badge bg-secondary">{{ h.batch }}</span></td>
             <td>
               {% if h.file_path %}
-                {% set filename = h.file_path.split('/')[-1] %}
-                <button class="btn btn-outline-success btn-sm" onclick="previewExcelModal('{{ filename }}')">
+                {% set filename = h.file_path.replace('\\', '/').split('/')[-1] %}
+                <button class="btn btn-sm btn-outline-success"
+                        onclick="previewExcel('{{ filename }}')">
                   <i class="bi bi-eye"></i> Lihat
                 </button>
-                <a href="/hasil_excel/{{ filename }}" download class="btn btn-success btn-sm">
+                <a href="/hasil_excel/{{ filename }}" 
+                  download class="btn btn-success btn-sm">
                   <i class="bi bi-download"></i> Unduh
                 </a>
               {% else %}
@@ -115,12 +117,10 @@
 </div>
 
 <script>
-function previewExcelModal(filename) {
-  const url = `/preview_excel/${filename}`;
-  const iframe = document.getElementById("previewFrame");
-  iframe.src = url;
-  const modal = new bootstrap.Modal(document.getElementById("previewModal"));
-  modal.show();
+function previewExcel(filename) {
+  const iframe = document.getElementById('previewFrame');
+  iframe.src = `/preview_excel/${filename}`;
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
 }
 </script>
 
