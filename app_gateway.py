@@ -237,6 +237,28 @@ def preview_file(filepath):
     else:
         return f"<p class='text-muted p-3'>Format file {ext} belum didukung untuk pratinjau.</p>"
 
+@app.route("/preview_upload/<path:filename>")
+def preview_upload(filename):
+    from urllib.parse import unquote
+    import pandas as pd
+    import os
+
+    filename = unquote(filename)
+    upload_path = os.path.join(os.getcwd(), "uploads", filename.replace("\\", "/"))
+
+    if not os.path.exists(upload_path):
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan:<br>{upload_path}</h4>"
+
+    try:
+        pd.set_option("display.max_rows", None)
+        pd.set_option("display.max_columns", None)
+        df = pd.read_excel(upload_path)
+        df_html = df.to_html(classes="table table-bordered table-striped", index=False)
+        return render_template("preview_excel.html", table_html=df_html, filename=filename)
+    except Exception as e:
+        return f"<h4 class='text-danger'>❌ Gagal membuka file Excel:<br>{e}</h4>"
+
+
 @app.route("/")
 def root():
     if not current_user():
