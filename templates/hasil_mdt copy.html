@@ -3,61 +3,24 @@
 
 <div class="container-fluid">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold text-success mb-0">
-      <i class="bi bi-file-earmark-bar-graph"></i> Hasil Penetapan Semua MDT
+    <h3 class="fw-bold text-success">
+      <i class="bi bi-file-earmark-check"></i> Hasil Penetapan Nomor Ijazah MDT
     </h3>
   </div>
 
-  <!-- Filter -->
-  <form method="GET" class="row g-3 align-items-end mb-4">
-    <div class="col-md-4">
-      <label class="form-label fw-semibold text-success">Kabupaten/Kota</label>
-      <select name="kabupaten" class="form-select border-success shadow-sm">
-        <option value="">Semua Kabupaten</option>
-        {% for kab in daftar_kabupaten %}
-          <option value="{{ kab }}" {% if kab == kabupaten_dipilih %}selected{% endif %}>{{ kab }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label fw-semibold text-success">Jenjang MDT</label>
-      <select name="jenjang" class="form-select border-success shadow-sm">
-        <option value="">Semua Jenjang</option>
-        {% for j in daftar_jenjang %}
-          <option value="{{ j }}" {% if j == jenjang_dipilih %}selected{% endif %}>{{ j }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-4 d-flex gap-2">
-      <button type="submit" class="btn btn-success flex-grow-1">
-        <i class="bi bi-filter"></i> Terapkan Filter
-      </button>
-      <a href="{{ url_for('hasil_kanwil') }}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-repeat"></i>
-      </a>
-    </div>
-  </form>
-
-  <!-- Tabel -->
   {% if hasil_list %}
   <div class="card shadow-sm border-0">
     <div class="card-header bg-success text-white">
-      <i class="bi bi-archive"></i> Daftar File Penetapan
+      <i class="bi bi-archive"></i> Daftar Hasil Penetapan
     </div>
-
     <div class="card-body table-responsive">
       <table class="table table-hover align-middle">
         <thead class="table-success">
           <tr>
             <th>No</th>
-            <th>Nama MDT</th>
-            <th>Kabupaten</th>
             <th>Jenjang</th>
             <th>Tahun</th>
-            <th>Jumlah</th>
-            <th>Batch</th>
+            <th>Jumlah Lulus</th>
             <th>File Hasil</th>
           </tr>
         </thead>
@@ -65,12 +28,9 @@
           {% for h in hasil_list %}
           <tr>
             <td>{{ loop.index }}</td>
-            <td>{{ h.nama_mdt }}</td>
-            <td>{{ h.kabupaten }}</td>
             <td>{{ h.jenjang }}</td>
             <td>{{ h.tahun }}</td>
             <td>{{ h.jumlah }}</td>
-            <td><span class="badge bg-secondary">{{ h.batch }}</span></td>
             <td>
               {% if h.file_path %}
                 {% set filename = h.file_path.replace('\\', '/').split('/')[-1] %}
@@ -92,16 +52,15 @@
       </table>
     </div>
   </div>
-
   {% else %}
   <div class="text-center text-muted py-5">
     <i class="bi bi-inbox display-4"></i>
-    <p class="mt-3">Belum ada hasil penetapan dari MDT manapun.</p>
+    <p>Belum ada hasil penetapan untuk MDT Anda.</p>
   </div>
   {% endif %}
 </div>
 
-<!-- Modal Preview Excel -->
+<!-- Modal Preview -->
 <div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
@@ -116,13 +75,11 @@
   </div>
 </div>
 
-
 <script>
 function previewExcel(filename) {
-  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
   const iframe = document.getElementById('previewFrame');
   iframe.src = `/preview_excel/${filename}`;
-  modal.show();
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
 }
 </script>
 

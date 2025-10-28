@@ -101,12 +101,12 @@
   {% endif %}
 </div>
 
-<!-- Modal Preview Excel -->
-<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+<!-- Modal Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header bg-success text-white">
-        <h5 class="modal-title"><i class="bi bi-file-earmark-spreadsheet"></i> Pratinjau File Hasil</h5>
+        <h5 class="modal-title"><i class="bi bi-file-earmark-spreadsheet"></i> Pratinjau Dokumen Excel</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-0" style="height:80vh;">
@@ -116,13 +116,11 @@
   </div>
 </div>
 
-
 <script>
 function previewExcel(filename) {
-  const modal = new bootstrap.Modal(document.getElementById('previewModal'));
   const iframe = document.getElementById('previewFrame');
   iframe.src = `/preview_excel/${filename}`;
-  modal.show();
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
 }
 </script>
 

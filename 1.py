@@ -5,10 +5,10 @@ c = conn.cursor()
 
 # Tambahkan kolom jika belum ada
 try:
-    c.execute("ALTER TABLE pengajuan ADD COLUMN file_hasil TEXT")
-    print("✅ Kolom 'file_hasil' berhasil ditambahkan ke tabel pengajuan.")
+    c.execute("ALTER TABLE riwayat_verifikasi ADD COLUMN tahun INTEGER")
+    print("✅ Kolom 'tahun' berhasil ditambahkan ke tabel pengajuan.")
 except sqlite3.OperationalError:
-    print("ℹ️ Kolom 'file_hasil' sudah ada, dilewati.")
+    print("ℹ️ Kolom 'tahun' sudah ada, dilewati.")
 
 conn.commit()
 conn.close()

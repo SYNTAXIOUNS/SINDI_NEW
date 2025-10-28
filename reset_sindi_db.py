@@ -6,14 +6,15 @@ DB_NAME = "sindi.db"
 # 🧱 Backup Database Lama
 # =========================
 if os.path.exists(DB_NAME):
-    os.rename(DB_NAME, f"sindi_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
-    print("🗂️ Backup dibuat.")
+    backup_name = f"sindi_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    os.rename(DB_NAME, backup_name)
+    print(f"🗂️ Backup database lama dibuat → {backup_name}")
 
 conn = sqlite3.connect(DB_NAME)
 c = conn.cursor()
 
 # =========================
-# 🔸 Tabel USERS
+# 🔸 USERS
 # =========================
 c.execute("""
 CREATE TABLE IF NOT EXISTS users (
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
 """)
 
 # =========================
-# 🔸 Tabel MASTER KABUPATEN
+# 🔸 MASTER KABUPATEN
 # =========================
 c.execute("""
 CREATE TABLE IF NOT EXISTS master_kabupaten (
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS master_kabupaten (
 """)
 
 # =========================
-# 🔸 Tabel PENGAJUAN
+# 🔸 PENGAJUAN MDT
 # =========================
 c.execute("""
 CREATE TABLE IF NOT EXISTS pengajuan (
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS pengajuan (
     status TEXT,
     nomor_batch TEXT,
     rekomendasi_file TEXT,
+    file_hasil TEXT,
     mdt_id INTEGER,
     kabupaten TEXT,
     alasan TEXT,
@@ -62,7 +64,7 @@ CREATE TABLE IF NOT EXISTS pengajuan (
 """)
 
 # =========================
-# 🔸 Tabel NOMOR IJAZAH
+# 🔸 NOMOR IJAZAH
 # =========================
 c.execute("""
 CREATE TABLE IF NOT EXISTS nomor_ijazah (
@@ -72,36 +74,54 @@ CREATE TABLE IF NOT EXISTS nomor_ijazah (
     nis TEXT,
     nomor_ijazah TEXT,
     tahun TEXT,
-    jenjang TEXT
+    jenjang TEXT,
+    FOREIGN KEY (pengajuan_id) REFERENCES pengajuan(id)
 )
 """)
 
 # =========================
-# 🔸 Tabel RIWAYAT VERIFIKASI
+# 🔸 RIWAYAT VERIFIKASI
 # =========================
 c.execute("""
 CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pengajuan_id INTEGER,
     nama_mdt TEXT,
+    jenjang TEXT,
+    tahun_pelajaran TEXT,
+    jumlah_lulus INTEGER,
     status TEXT,
     alasan TEXT,
     verifikator TEXT,
-    tanggal_verifikasi TEXT
+    tanggal_verifikasi TEXT,
+    FOREIGN KEY (pengajuan_id) REFERENCES pengajuan(id)
 )
 """)
 
 # =========================
-# 🧩 Trigger: Simpan otomatis ke riwayat saat verifikasi berubah
+# 🧩 TRIGGER OTOMATIS
 # =========================
 c.execute("""
-CREATE TRIGGER IF NOT EXISTS after_pengajuan_update
+CREATE TRIGGER IF NOT EXISTS after_pengajuan_status_update
 AFTER UPDATE OF status ON pengajuan
 BEGIN
-    INSERT INTO riwayat_verifikasi (pengajuan_id, nama_mdt, status, alasan, verifikator, tanggal_verifikasi)
+    INSERT INTO riwayat_verifikasi (
+        pengajuan_id,
+        nama_mdt,
+        jenjang,
+        tahun_pelajaran,
+        jumlah_lulus,
+        status,
+        alasan,
+        verifikator,
+        tanggal_verifikasi
+    )
     VALUES (
         NEW.id,
         NEW.nama_mdt,
+        NEW.jenjang,
+        NEW.tahun_pelajaran,
+        NEW.jumlah_lulus,
         NEW.status,
         NEW.alasan,
         NEW.verifikator,
@@ -113,7 +133,7 @@ END;
 conn.commit()
 
 # =========================
-# 📍 ISI MASTER KABUPATEN
+# 📍 MASTER DATA KABUPATEN
 # =========================
 kabupaten_jabar = [
     "Kabupaten Bandung", "Kabupaten Bandung Barat", "Kabupaten Bekasi", "Kabupaten Bogor",
@@ -130,13 +150,13 @@ for k in kabupaten_jabar:
 conn.commit()
 
 # =========================
-# 👤 USER AWAL
+# 👤 USER AWAL SISTEM
 # =========================
 users = [
     ("admin", "123", "admin", None, "Kanwil Jawa Barat"),
     ("kanwil", "123", "kanwil", None, "Kanwil Jawa Barat"),
-    ("kemenag", "123", "kemenag", None, "Jawa barat"),
-    ("mdt", "123", "mdt", "MDT001", "Jawa Barat"),
+    ("kemenag", "123", "kankemenag", None, "Kemenag Kabupaten/Kota"),
+    ("mdt", "123", "mdt", "MDT001", "Kota Cimahi"),
 ]
 for u in users:
     c.execute("INSERT INTO users (username, password, role, kode_mdt, wilayah) VALUES (?, ?, ?, ?, ?)", u)
@@ -145,3 +165,5 @@ conn.commit()
 conn.close()
 
 print("✅ Database 'sindi.db' berhasil dibuat ulang dan siap digunakan untuk aplikasi SINDI.")
+print("📦 Struktur tabel termasuk: users, master_kabupaten, pengajuan, nomor_ijazah, dan riwayat_verifikasi.")
+print("🧠 Trigger aktif: otomatis mencatat setiap perubahan status pengajuan ke tabel riwayat_verifikasi.")

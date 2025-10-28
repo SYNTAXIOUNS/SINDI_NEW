@@ -3,18 +3,34 @@ import sqlite3, datetime, os, pandas as pd
 from fpdf import FPDF
 from flask import send_file
 
-BASE_DIR = "/tmp" if os.getenv("RENDER") else os.getcwd()
-HASIL_DIR = os.path.join(BASE_DIR, "hasil_excel")
-DB_PATH = os.path.join(BASE_DIR, "sindi.db")
-os.makedirs(HASIL_DIR, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_NAME = os.path.join(BASE_DIR, "sindi.db")
 
 
+# ======================================
+# HYBRID DB: PostgreSQL (Render) / SQLite (Local)
+# ======================================
+DATABASE_URL = os.getenv("DATABASE_URL")
+IS_POSTGRES = DATABASE_URL is not None  # ✅ Tambahkan baris ini
+DB_NAME = "sindi.db"
+
+def _conn():
+    if IS_POSTGRES:
+        result = urlparse(DATABASE_URL)
+        return psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+    return sqlite3.connect(DB_NAME)
 # ======================
 # KONEKSI DATABASE
 # ======================
 def _conn():
     """Koneksi SQLite"""
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect(DB_NAME)
 
 # ======================
 # MIGRASI / INIT
@@ -142,79 +158,117 @@ def list_pengajuan_for_kanwil():
         return c.fetchall()
 
 
-# ===========================================================
-# 🔸 Tetapkan Pengajuan oleh Kanwil (Render-safe)
-# ===========================================================
+# ==========================================
+# 🔹 Penetapan oleh Kanwil
+# ==========================================
 def tetapkan_pengajuan(pengajuan_id):
-    """Kanwil menetapkan pengajuan dan generate file hasil dengan nomor ijazah"""
-    conn = _conn()
-    c = conn.cursor()
+    """Kanwil menetapkan pengajuan dan generate file hasil berisi nomor ijazah"""
+    import datetime
 
-    c.execute("""
-        SELECT file_lulusan, nama_mdt, jenjang, tahun_pelajaran
-        FROM pengajuan WHERE id=?
-    """, (pengajuan_id,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        raise Exception("Data pengajuan tidak ditemukan.")
-
-    file_lulusan, nama_mdt, jenjang, tahun = row
-
-    # buat file hasil
+    # 🔹 Jalankan generate dulu agar tidak bentrok koneksi SQLite
     hasil_file = generate_nomor_ijazah_batch(pengajuan_id)
 
-    # update status & path
-    c.execute("""
-        UPDATE pengajuan
-        SET status='Ditetapkan',
-            file_hasil=?,
-            tanggal_verifikasi=?
-        WHERE id=?
-    """, (hasil_file, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), pengajuan_id))
-    conn.commit()
-    conn.close()
+    # 🔹 Setelah hasil berhasil dibuat, update tabel pengajuan
+    with _conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE pengajuan
+            SET status='Ditetapkan',
+                file_hasil=?,
+                tanggal_verifikasi=? 
+            WHERE id=?
+        """, (
+            hasil_file,
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            pengajuan_id
+        ))
+        conn.commit()
 
     print(f"✅ Pengajuan {pengajuan_id} berhasil ditetapkan → {hasil_file}")
     return hasil_file
 
-# ===========================================================
-# 🔸 Endpoint helper (untuk unduh di Render)
-# ===========================================================
-def get_hasil_excel(filename):
-    path = os.path.join(HASIL_DIR, filename)
-    if not os.path.exists(path):
-        return f"<h4 style='color:red'>❌ File tidak ditemukan: {path}</h4>"
-    return send_file(path, as_attachment=True)
-
-# ===========================================================
-# 🔸 Generate File Hasil Penetapan Ijazah (Aman untuk Render)
-# ===========================================================
 def generate_nomor_ijazah_batch(pengajuan_id):
-    conn = _conn(); c = conn.cursor()
-    c.execute("SELECT nama_mdt, jenjang, tahun_pelajaran, file_lulusan FROM pengajuan WHERE id=?", (pengajuan_id,))
-    row = c.fetchone()
-    if not row: raise Exception("Data pengajuan tidak ditemukan.")
-    nama_mdt, jenjang, tahun, file_lulusan = row
+    """Generate nomor ijazah dari file upload MDT dan simpan hasil ke hasil_excel"""
+    import pandas as pd
+    import os, datetime
 
-    if not file_lulusan or not os.path.exists(file_lulusan):
-        raise Exception(f"File tidak ditemukan: {file_lulusan}")
+    # Pastikan folder hasil_excel ada
+    os.makedirs("hasil_excel", exist_ok=True)
 
-    df = pd.read_excel(file_lulusan)
-    if not {"Nama santri","Nomor Induk Santri"}.issubset(df.columns):
-        raise Exception("File wajib memiliki kolom 'Nama santri' dan 'Nomor Induk Santri'.")
+    with _conn() as conn:
+        c = conn.cursor()
 
-    prefix = f"MDT-{pengajuan_id:03d}-{tahun.split('/')[0]}"
-    df["Nomor Ijazah"] = [f"{prefix}-{i:04d}" for i in range(1, len(df)+1)]
+        # Ambil data pengajuan
+        c.execute("""
+            SELECT file_lulusan, jenjang, tahun_pelajaran, nama_mdt
+            FROM pengajuan WHERE id=?
+        """, (pengajuan_id,))
+        row = c.fetchone()
+        if not row:
+            raise Exception("❌ Data pengajuan tidak ditemukan.")
 
-    safe_name = "".join(x for x in nama_mdt if x.isalnum())
-    filename = f"HASIL_{safe_name}_{tahun.replace('/','_')}_{jenjang}.xlsx"
-    filepath = os.path.join(HASIL_DIR, filename)
-    df.to_excel(filepath, index=False)
+        file_lulusan, jenjang, tahun, nama_mdt = row
 
-    c.execute("UPDATE pengajuan SET file_hasil=?, status='Ditetapkan' WHERE id=?", (filepath, pengajuan_id))
-    conn.commit(); conn.close()
-    return filepath
+        # Validasi file upload
+        if not file_lulusan or not os.path.exists(file_lulusan):
+            raise Exception(f"❌ File upload tidak ditemukan: {file_lulusan}")
+
+        # Baca file Excel asli
+        df = pd.read_excel(file_lulusan)
+        df.columns = [str(col).strip().lower().replace(" ", "_") for col in df.columns]
+
+        # Deteksi kolom nama santri & NIS otomatis
+        nama_col = next((c for c in df.columns if "nama_santri" in c or c.startswith("nama")), None)
+        nis_col = next((c for c in df.columns if "nomor_induk" in c or "nis" in c), None)
+
+        if not nama_col or not nis_col:
+            raise Exception("File wajib memiliki kolom 'Nama Santri' dan 'Nomor Induk Santri'.")
+
+        # Kode jenjang (I = Ula, II = Wustha, III = Ulya)
+        kode_jenjang = {"Ula": "I", "Wustha": "II", "Ulya": "III"}.get(jenjang.capitalize(), "I")
+
+        # Hitung total nomor ijazah yang sudah ada
+        c.execute("SELECT COUNT(*) FROM nomor_ijazah")
+        start = c.fetchone()[0] or 0
+
+        nomor_list = []
+        for i, row in df.iterrows():
+            urut = str(start + i + 1).zfill(6)
+            no_ijazah = f"MDT-12-{kode_jenjang}-{tahun}-{urut}"
+            nomor_list.append((pengajuan_id, row[nama_col], str(row[nis_col]), no_ijazah, tahun, jenjang))
+
+        # Tambahkan kolom hasil ke Excel
+        df["Nomor Ijazah"] = [n[3] for n in nomor_list]
+
+        # Simpan file hasil
+        safe_nama = nama_mdt.replace(" ", "_").replace("/", "_")
+        output_path = os.path.join("hasil_excel", f"HASIL_{safe_nama}_{tahun}_{jenjang}.xlsx")
+
+        # Hapus file lama jika sudah ada
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
+        df.to_excel(output_path, index=False)
+
+        # Simpan ke DB tabel nomor_ijazah
+        c.executemany("""
+            INSERT INTO nomor_ijazah (pengajuan_id, nama_santri, nis, nomor_ijazah, tahun, jenjang)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, nomor_list)
+
+        # Update pengajuan agar status & file hasil sinkron
+        c.execute("""
+            UPDATE pengajuan
+            SET status='Ditetapkan',
+                file_hasil=?,
+                tanggal_verifikasi=?
+            WHERE id=?
+        """, (output_path, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), pengajuan_id))
+
+        conn.commit()
+
+    print(f"✅ File hasil disimpan di: {output_path}")
+    return output_path
 
 # ======================
 # MDT & KANWIL: HASIL

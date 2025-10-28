@@ -595,11 +595,18 @@ def serve_upload(filename):
 # =============================================
 # Serve folder hasil_excel (untuk file hasil ijazah)
 # =============================================
-from services.mdt_service import get_hasil_excel
-
 @app.route("/hasil_excel/<path:filename>")
-def hasil_excel_download(filename):
-    return get_hasil_excel(filename)
+def serve_hasil_excel(filename):
+    import os
+    from flask import send_from_directory, abort
+
+    hasil_dir = os.path.join(os.getcwd(), "hasil_excel")
+    file_path = os.path.join(hasil_dir, filename)
+
+    if not os.path.exists(file_path):
+        abort(404)
+
+    return send_from_directory(hasil_dir, filename, as_attachment=False)
 
 # ======================================================
 # ✅ Preview file Excel hasil penetapan ijazah (langsung dibaca)
