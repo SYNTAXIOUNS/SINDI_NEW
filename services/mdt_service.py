@@ -207,10 +207,10 @@ def generate_nomor_ijazah_batch(pengajuan_id):
     prefix = f"MDT-{pengajuan_id:03d}-{tahun.split('/')[0]}"
     df["Nomor Ijazah"] = [f"{prefix}-{i:04d}" for i in range(1, len(df)+1)]
 
-    safe_name = "".join(x for x in nama_mdt if x.isalnum())
-    filename = f"HASIL_{safe_name}_{tahun.replace('/','_')}_{jenjang}.xlsx"
-    filepath = os.path.join(HASIL_DIR, filename)
-    df.to_excel(filepath, index=False)
+    hasil_filename = f"HASIL_{nama_mdt}_{tahun}_{jenjang}.xlsx"
+    hasil_path = os.path.join("/tmp/hasil_excel", hasil_filename)
+    df.to_excel(hasil_path, index=False)
+
 
     c.execute("UPDATE pengajuan SET file_hasil=?, status='Ditetapkan' WHERE id=?", (filepath, pengajuan_id))
     conn.commit(); conn.close()

@@ -50,8 +50,9 @@ def get_connection():
     return sqlite3.connect(sqlite_path)
 
 # ====== APP CONFIG ======
-app = Flask(__name__, template_folder="templates", static_folder="static")
-app.secret_key = "sindi_secret_key_please_change"
+app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.config["PROPAGATE_EXCEPTIONS"] = True
+
 # =======================================
 # Database Path (Render + Lokal Compatible)
 # =======================================
@@ -75,6 +76,30 @@ except Exception as e:
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+import sqlite3, os
+
+
+BASE_DIR = os.getcwd()
+UPLOAD_DIR = os.path.join("/tmp", "uploads")
+HASIL_DIR = os.path.join("/tmp", "hasil_excel")
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(HASIL_DIR, exist_ok=True)
+
+
+DB_PATH = "/tmp/sindi.db"
+if not os.path.exists(DB_PATH):
+    from create_db import create_database  # import fungsi yang kamu pakai
+    create_database(DB_PATH)
+
+
+def get_db_connection():
+    os.makedirs("/tmp", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def get_connection():
     """
@@ -639,16 +664,20 @@ def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
         })
     return hasil
 
-@app.route("/uploads/<path:filename>")
-def download_uploads(filename):
-    """Unduh file yang diupload MDT"""
-    return send_from_directory("uploads", filename, as_attachment=True)
+@app.route("/uploads/<filename>")
+def uploads(filename):
+    filepath = os.path.join("/tmp/uploads", filename)
+    if not os.path.exists(filepath):
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan: {filepath}</h4>", 404
+    return send_file(filepath, as_attachment=False)
 
 
-@app.route("/hasil_excel/<path:filename>")
-def download_hasil_excel(filename):
-    from flask import send_from_directory
-    return send_from_directory("hasil_excel", filename, as_attachment=True)
+@app.route("/hasil_excel/<filename>")
+def hasil_excel(filename):
+    filepath = os.path.join("/tmp/hasil_excel", filename)
+    if not os.path.exists(filepath):
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan: {filepath}</h4>", 404
+    return send_file(filepath, as_attachment=False)
 
 @app.route("/preview-file/<path:filename>")
 def preview_file(filename):
@@ -863,7 +892,9 @@ def hasil_view():
 #  RUN
 # ==============================
 if __name__ == "__main__":
-    app.run(debug=True)
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 # biar bisa dikenali Render
 if __name__ == "app_gateway":
