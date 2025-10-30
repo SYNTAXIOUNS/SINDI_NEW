@@ -13,31 +13,29 @@ os.makedirs(HASIL_DIR, exist_ok=True)
 # KONEKSI DATABASE
 # ======================
 def _conn():
-    """Koneksi SQLite"""
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 # ======================
 # MIGRASI / INIT
 # ======================
 
 def init_db():
-    """Membuat kolom & tabel tambahan jika belum ada"""
     with _conn() as conn:
         c = conn.cursor()
-
-        # Tambah kolom baru di pengajuan bila belum ada
         for col, tipe in [
             ("alasan", "TEXT"),
             ("kabupaten", "TEXT"),
             ("tanggal_verifikasi", "TEXT"),
             ("verifikator", "TEXT"),
+            ("file_hasil", "TEXT"),
         ]:
             try:
                 c.execute(f"ALTER TABLE pengajuan ADD COLUMN {col} {tipe}")
             except sqlite3.OperationalError:
                 pass  # kolom sudah ada
 
-        # ✅ Buat tabel riwayat_verifikasi jika belum ada
         c.execute("""
         CREATE TABLE IF NOT EXISTS riwayat_verifikasi (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,45 +50,28 @@ def init_db():
             tanggal_verifikasi TEXT
         )
         """)
-
         conn.commit()
 
 # ======================
 # MDT: PENGAJUAN
 # ======================
 def create_pengajuan_batch(mdt_user, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, file_lulusan_path):
-    import datetime
-    from app_gateway import DB_NAME
-    import sqlite3
-
     nomor_batch = f"BATCH_{mdt_user['kode_mdt']}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     kabupaten = mdt_user.get("wilayah", "-")
 
-    with sqlite3.connect(DB_NAME) as conn:
+    with _conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO pengajuan (
                 nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
                 file_lulusan, tanggal_pengajuan, status, nomor_batch,
-                rekomendasi_file, mdt_id, kabupaten, alasan,
-                tanggal_verifikasi, verifikator
+                mdt_id, kabupaten
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            nama_mdt,
-            jenjang,
-            tahun_pelajaran,
-            jumlah_lulus,
-            file_lulusan_path,
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Menunggu",
-            nomor_batch,
-            None,
-            mdt_user["id"],
-            kabupaten,
-            None,
-            None,
-            None
+            nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
+            file_lulusan_path, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Menunggu", nomor_batch, mdt_user["id"], kabupaten
         ))
         conn.commit()
     return nomor_batch
@@ -102,8 +83,7 @@ def list_pengajuan_batch_by_mdt(mdt_id):
         c.execute("""
             SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran,
                    jumlah_lulus, file_lulusan, status, kabupaten
-            FROM pengajuan
-            WHERE mdt_id=? ORDER BY id DESC
+            FROM pengajuan WHERE mdt_id=? ORDER BY id DESC
         """, (mdt_id,))
         return c.fetchall()
 
@@ -111,17 +91,12 @@ def list_pengajuan_batch_by_mdt(mdt_id):
 # KANKEMENAG: VERIFIKASI
 # ======================
 def list_pengajuan_for_kemenag():
-    import sqlite3
-    from app_gateway import DB_NAME
-
-    with sqlite3.connect(DB_NAME) as conn:
+    with _conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
                    file_lulusan, status, kabupaten
-            FROM pengajuan
-            WHERE status = 'Menunggu'
-            ORDER BY id DESC
+            FROM pengajuan WHERE status='Menunggu' ORDER BY id DESC
         """)
         return c.fetchall()
 
@@ -129,15 +104,12 @@ def list_pengajuan_for_kemenag():
 # KANWIL: PENETAPAN NOMOR IJAZAH
 # ======================
 def list_pengajuan_for_kanwil():
-    """Menampilkan hanya yang sudah diverifikasi oleh Kemenag."""
     with _conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT id, nomor_batch, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus,
                    file_lulusan, status, kabupaten, alasan, verifikator, tanggal_verifikasi
-            FROM pengajuan
-            WHERE status = 'Diverifikasi'
-            ORDER BY id DESC
+            FROM pengajuan WHERE status='Diverifikasi' ORDER BY id DESC
         """)
         return c.fetchall()
 
@@ -146,14 +118,11 @@ def list_pengajuan_for_kanwil():
 # 🔸 Tetapkan Pengajuan oleh Kanwil (Render-safe)
 # ===========================================================
 def tetapkan_pengajuan(pengajuan_id):
-    """Kanwil menetapkan pengajuan dan generate file hasil dengan nomor ijazah"""
+    """Kanwil menetapkan pengajuan dan generate file hasil."""
     conn = _conn()
     c = conn.cursor()
 
-    c.execute("""
-        SELECT file_lulusan, nama_mdt, jenjang, tahun_pelajaran
-        FROM pengajuan WHERE id=?
-    """, (pengajuan_id,))
+    c.execute("SELECT file_lulusan, nama_mdt, jenjang, tahun_pelajaran FROM pengajuan WHERE id=?", (pengajuan_id,))
     row = c.fetchone()
     if not row:
         conn.close()
@@ -161,10 +130,8 @@ def tetapkan_pengajuan(pengajuan_id):
 
     file_lulusan, nama_mdt, jenjang, tahun = row
 
-    # buat file hasil
     hasil_file = generate_nomor_ijazah_batch(pengajuan_id)
 
-    # update status & path
     c.execute("""
         UPDATE pengajuan
         SET status='Ditetapkan',
@@ -190,31 +157,33 @@ def get_hasil_excel(filename):
 # ===========================================================
 # 🔸 Generate File Hasil Penetapan Ijazah (Aman untuk Render)
 # ===========================================================
-def generate_nomor_ijazah_batch(pengajuan_id):
-    conn = _conn(); c = conn.cursor()
-    c.execute("SELECT nama_mdt, jenjang, tahun_pelajaran, file_lulusan FROM pengajuan WHERE id=?", (pengajuan_id,))
+def tetapkan_pengajuan(pengajuan_id):
+    """Kanwil menetapkan pengajuan dan generate file hasil."""
+    conn = _conn()
+    c = conn.cursor()
+
+    c.execute("SELECT file_lulusan, nama_mdt, jenjang, tahun_pelajaran FROM pengajuan WHERE id=?", (pengajuan_id,))
     row = c.fetchone()
-    if not row: raise Exception("Data pengajuan tidak ditemukan.")
-    nama_mdt, jenjang, tahun, file_lulusan = row
+    if not row:
+        conn.close()
+        raise Exception("Data pengajuan tidak ditemukan.")
 
-    if not file_lulusan or not os.path.exists(file_lulusan):
-        raise Exception(f"File tidak ditemukan: {file_lulusan}")
+    file_lulusan, nama_mdt, jenjang, tahun = row
 
-    df = pd.read_excel(file_lulusan)
-    if not {"Nama santri","Nomor Induk Santri"}.issubset(df.columns):
-        raise Exception("File wajib memiliki kolom 'Nama santri' dan 'Nomor Induk Santri'.")
+    hasil_file = generate_nomor_ijazah_batch(pengajuan_id)
 
-    prefix = f"MDT-{pengajuan_id:03d}-{tahun.split('/')[0]}"
-    df["Nomor Ijazah"] = [f"{prefix}-{i:04d}" for i in range(1, len(df)+1)]
+    c.execute("""
+        UPDATE pengajuan
+        SET status='Ditetapkan',
+            file_hasil=?,
+            tanggal_verifikasi=?
+        WHERE id=?
+    """, (hasil_file, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), pengajuan_id))
+    conn.commit()
+    conn.close()
 
-    hasil_filename = f"HASIL_{nama_mdt}_{tahun}_{jenjang}.xlsx"
-    hasil_path = os.path.join("/tmp/hasil_excel", hasil_filename)
-    df.to_excel(hasil_path, index=False)
-
-
-    c.execute("UPDATE pengajuan SET file_hasil=?, status='Ditetapkan' WHERE id=?", (filepath, pengajuan_id))
-    conn.commit(); conn.close()
-    return filepath
+    print(f"✅ Pengajuan {pengajuan_id} berhasil ditetapkan → {hasil_file}")
+    return hasil_file
 
 # ======================
 # MDT & KANWIL: HASIL
@@ -231,28 +200,20 @@ def get_nomor_ijazah_by_pengajuan(pengajuan_id):
 def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
     conn = _conn()
     c = conn.cursor()
-
     query = """
-        SELECT 
-            p.id, p.nama_mdt, p.jenjang, p.tahun_pelajaran, 
-            p.jumlah_lulus, p.kabupaten, p.nomor_batch, 
-            COALESCE(p.file_hasil, p.rekomendasi_file, p.file_lulusan)
-        FROM pengajuan p
-        WHERE p.status = 'Ditetapkan'
+        SELECT id, nama_mdt, jenjang, tahun_pelajaran, jumlah_lulus, kabupaten,
+               nomor_batch, COALESCE(file_hasil, file_lulusan)
+        FROM pengajuan WHERE status='Ditetapkan'
     """
     params = []
-
     if kode_mdt:
-        query += " AND p.nama_mdt = ?"
-        params.append(kode_mdt)
+        query += " AND nama_mdt=?"; params.append(kode_mdt)
     if kabupaten:
-        query += " AND p.kabupaten = ?"
-        params.append(kabupaten)
+        query += " AND kabupaten=?"; params.append(kabupaten)
     if jenjang:
-        query += " AND p.jenjang = ?"
-        params.append(jenjang)
+        query += " AND jenjang=?"; params.append(jenjang)
+    query += " ORDER BY id DESC"
 
-    query += " ORDER BY p.id DESC"
     c.execute(query, params)
     rows = c.fetchall()
     conn.close()

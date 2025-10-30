@@ -23,34 +23,10 @@ from flask import send_from_directory, abort
 from flask import render_template
 import pandas as pd
 from urllib.parse import unquote
-# -------------------------
-# koneksi database fleksibel
-# -------------------------
-def get_connection():
-    db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        try:
-            result = urlparse(db_url)
-            conn = psycopg2.connect(
-                database=result.path[1:],
-                user=result.username,
-                password=result.password,
-                host=result.hostname,
-                port=result.port
-            )
-            print("✅ Terhubung ke PostgreSQL")
-            return conn
-        except Exception as e:
-            print("⚠️ Gagal konek ke PostgreSQL:", e)
-
-    # fallback ke SQLite
-    os.makedirs("instance", exist_ok=True)
-    sqlite_path = os.path.join("instance", "sindi.db")
-    print("🔸 Menggunakan SQLite:", sqlite_path)
-    return sqlite3.connect(sqlite_path)
 
 # ====== APP CONFIG ======
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.secret_key = os.getenv("SECRET_KEY", "sangat_rahasia")
 app.config["PROPAGATE_EXCEPTIONS"] = True
 
 # =======================================
@@ -59,31 +35,10 @@ app.config["PROPAGATE_EXCEPTIONS"] = True
 
 # Tentukan base folder aplikasi
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
-# Gunakan /tmp agar bisa write di Render
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.path.join(BASE_DIR, "sindi.db")
-print(f"📂 Database aktif di: {DB_NAME}")
-
-try:
-    init_db()
-except Exception as e:
-    print(f"⚠️ Gagal inisialisasi database: {e}")
-# =======================================
-# Opsional: Jika nanti DATABASE_URL (PostgreSQL) tersedia
-# maka otomatis gunakan PostgreSQL
-# =======================================
-
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-import sqlite3, os
-
-
-BASE_DIR = os.getcwd()
-UPLOAD_DIR = os.path.join("/tmp", "uploads")
-HASIL_DIR = os.path.join("/tmp", "hasil_excel")
+TMP_DIR = "/tmp"
+UPLOAD_DIR = os.path.join(TMP_DIR, "uploads")
+HASIL_DIR = os.path.join(TMP_DIR, "hasil_excel")
+DB_PATH = os.path.join(TMP_DIR, "sindi.db")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(HASIL_DIR, exist_ok=True)
@@ -94,35 +49,68 @@ if not os.path.exists(DB_PATH):
     from create_db import create_database  # import fungsi yang kamu pakai
     create_database(DB_PATH)
 
+def get_connection():
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        try:
+            parsed = urlparse(db_url)
+            conn = psycopg2.connect(
+                database=parsed.path[1:],
+                user=parsed.username,
+                password=parsed.password,
+                host=parsed.hostname,
+                port=parsed.port
+            )
+            print("✅ Connected to PostgreSQL")
+            return conn
+        except Exception as e:
+            print(f"⚠️ PostgreSQL error: {e} — fallback to SQLite")
 
-def get_db_connection():
-    os.makedirs("/tmp", exist_ok=True)
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-def get_connection():
-    """
-    Otomatis pakai PostgreSQL di Render,
-    fallback ke SQLite di lokal.
-    """
-    if DATABASE_URL:
-        try:
-            result = urlparse(DATABASE_URL)
-            conn = psycopg2.connect(
-                database=result.path[1:],
-                user=result.username,
-                password=result.password,
-                host=result.hostname,
-                port=result.port
-            )
-            print("✅ Terkoneksi ke PostgreSQL")
-            return conn
-        except Exception as e:
-            print(f"⚠️ Gagal konek PostgreSQL: {e}, fallback ke SQLite")
 
-    print("🔸 Menggunakan SQLite lokal:", DB_NAME)
-    return sqlite3.connect(DB_NAME)
+# -------------------------
+# Auto-create database di Render jika belum ada
+# -------------------------
+def create_database(path):
+    print(f"🧱 Membuat ulang database di {path} ...")
+    conn = sqlite3.connect(path)
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        password TEXT,
+        role TEXT,
+        kode_mdt TEXT,
+        wilayah TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS pengajuan (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nama_mdt TEXT,
+        jenjang TEXT,
+        tahun_pelajaran TEXT,
+        jumlah_lulus INTEGER,
+        file_lulusan TEXT,
+        kabupaten TEXT,
+        status TEXT,
+        nomor_batch TEXT,
+        alasan TEXT,
+        tanggal_verifikasi TEXT,
+        verifikator TEXT
+    )
+    """)
+    conn.commit()
+    conn.close()
+    print("✅ Database siap digunakan.")
+
+if not os.path.exists(DB_PATH):
+    create_database(DB_PATH)
 
 UPLOAD_DIR = "uploads"
 ALLOWED_EXT = {"pdf", "xls", "xlsx"}
@@ -598,44 +586,14 @@ def hasil():
     
 @app.route("/uploads/<path:filename>")
 def serve_upload(filename):
-    """
-    Melayani file dari folder /uploads agar bisa dipratinjau langsung di browser (PDF, XLSX, dsb)
-    """
-    uploads_dir = os.path.join(os.getcwd(), "uploads")
-    
-    # Normalisasi path agar aman (hindari traversal ../../)
-    safe_path = os.path.normpath(os.path.join(uploads_dir, filename))
-    
-    # Cegah akses di luar folder uploads
-    if not safe_path.startswith(uploads_dir):
-        abort(403)
-    
-    # Pastikan file ada
-    if not os.path.isfile(safe_path):
-        abort(404)
-    
-    # Kirim file
-    return send_from_directory(uploads_dir, filename, as_attachment=False)
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.isfile(filepath):
+        return f"<h4 class='text-danger'>❌ File tidak ditemukan: {filepath}</h4>", 404
+    return send_file(filepath, as_attachment=False)
 
-# =============================================
-# Serve folder hasil_excel (untuk file hasil ijazah)
-# =============================================
-from services.mdt_service import get_hasil_excel
-
-@app.route("/hasil_excel/<path:filename>")
-def hasil_excel_download(filename):
-    return get_hasil_excel(filename)
-
-# ======================================================
-# ✅ Preview file Excel hasil penetapan ijazah (langsung dibaca)
-# ======================================================
-from urllib.parse import unquote
-import os
-import pandas as pd
-from flask import render_template
 
 def list_hasil_penetapan(kode_mdt=None, kabupaten=None, jenjang=None):
-    conn = _conn()
+    conn = conn()
     c = conn.cursor()
     query = """
         SELECT 
@@ -672,10 +630,10 @@ def uploads(filename):
     return send_file(filepath, as_attachment=False)
 
 
-@app.route("/hasil_excel/<filename>")
+@app.route("/hasil_excel/<path:filename>")
 def hasil_excel(filename):
-    filepath = os.path.join("/tmp/hasil_excel", filename)
-    if not os.path.exists(filepath):
+    filepath = os.path.join(HASIL_DIR, filename)
+    if not os.path.isfile(filepath):
         return f"<h4 class='text-danger'>❌ File tidak ditemukan: {filepath}</h4>", 404
     return send_file(filepath, as_attachment=False)
 
@@ -887,6 +845,15 @@ def hasil_view():
     user = current_user()
     hasil = list_hasil_penetapan_by_role(user["role"])
     return render_template("hasil.html", user=user, hasil=hasil)
+
+import logging
+from logging import StreamHandler
+
+handler = StreamHandler()
+handler.setLevel(logging.DEBUG)
+app.logger.addHandler(handler)
+app.logger.setLevel(logging.DEBUG)
+
 
 # ==============================
 #  RUN
